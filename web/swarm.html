@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Swarm Control</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet" />
+
+    <!-- xterm.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.5.0/css/xterm.css" />
+
+    <style>
+        /* =====================================================
+           CSS Variables — Neon Cyberpunk Palette
+           ===================================================== */
+        :root {
+            --neon-cyan:     #00fff5;
+            --neon-green:    #39ff14;
+            --neon-yellow:   #ffe600;
+            --neon-red:      #ff0033;
+            --neon-magenta:  #ff00ff;
+            --bg-dark:       #0a0a0f;
+            --bg-panel:      #12121a;
+            --border-default:#2a2a3a;
+
+            --glow-cyan:     0 0 6px #00fff5, 0 0 16px #00fff566;
+            --glow-green:    0 0 6px #39ff14, 0 0 16px #39ff1466;
+            --glow-yellow:   0 0 6px #ffe600, 0 0 16px #ffe60066;
+            --glow-red:      0 0 6px #ff0033, 0 0 16px #ff003366;
+            --glow-magenta:  0 0 6px #ff00ff, 0 0 16px #ff00ff66;
+        }
+
+        /* =====================================================
+           Base / Reset
+           ===================================================== */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-dark);
+            color: var(--neon-cyan);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* =====================================================
+           Background canvases (particle + hex grid)
+           ===================================================== */
+        #canvas-hex,
+        #canvas-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #canvas-hex        { z-index: 0; }
+        #canvas-particles  { z-index: 1; }
+
+        /* =====================================================
+           Layout Wrapper
+           ===================================================== */
+        #app {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* =====================================================
+           Header
+           ===================================================== */
+        header {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 10px 20px;
+            background: rgba(10, 10, 15, 0.85);
+            border-bottom: 1px solid var(--neon-cyan);
+            box-shadow: var(--glow-cyan);
+            flex-shrink: 0;
+        }
+
+        header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--neon-cyan);
+            text-shadow: var(--glow-cyan);
+            text-transform: uppercase;
+        }
+
+        /* Status dot */
+        #status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #555;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+
+        #status-dot.connected    { background: var(--neon-green); box-shadow: var(--glow-green); }
+        #status-dot.disconnected { background: var(--neon-red);   box-shadow: var(--glow-red); }
+
+        #status-text {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        /* Worker count & tick counter */
+        .header-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+            margin-left: 12px;
+        }
+
+        .header-stat .label {
+            font-size: 0.6rem;
+            color: #555;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .header-stat .value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--neon-yellow);
+            text-shadow: var(--glow-yellow);
+        }
+
+        /* Push stats to the right */
+        .header-spacer { flex: 1; }
+
+        /* =====================================================
+           Terminal Grid
+           ===================================================== */
+        #terminal-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-auto-rows: 1fr;
+            gap: 8px;
+            padding: 8px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        /* =====================================================
+           Agent Panels
+           ===================================================== */
+        .agent-panel {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            overflow: hidden;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        /* Orchestrator always spans two rows */
+        .agent-panel.orchestrator-panel {
+            grid-column: 1;
+            grid-row: 1 / 3;
+        }
+
+        /* ---- State classes ---- */
+        .agent-panel.state-orchestrator {
+            border-color: var(--neon-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .agent-panel.state-acting {
+            border-color: var(--neon-green);
+            box-shadow: var(--glow-green);
+        }
+
+        .agent-panel.state-thinking {
+            border-color: var(--neon-yellow);
+            box-shadow: var(--glow-yellow);
+        }
+
+        .agent-panel.state-error {
+            border-color: var(--neon-red);
+            box-shadow: var(--glow-red);
+        }
+
+        .agent-panel.state-idle {
+            border-color: #333344;
+            box-shadow: none;
+        }
+
+        /* Border pulse on action */
+        @keyframes borderPulse {
+            0%   { box-shadow: 0 0 20px #39ff14cc, 0 0 40px #39ff1488; }
+            60%  { box-shadow: 0 0 8px #39ff1488,  0 0 20px #39ff1444; }
+            100% { box-shadow: var(--glow-green); }
+        }
+
+        .agent-panel.pulse {
+            animation: borderPulse 0.8s ease-out forwards;
+        }
+
+        /* =====================================================
+           Panel Header Bar
+           ===================================================== */
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: 1px solid var(--border-default);
+            flex-shrink: 0;
+        }
+
+        .panel-agent-id {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .state-orchestrator .panel-agent-id { color: var(--neon-cyan); }
+        .state-acting       .panel-agent-id { color: var(--neon-green); }
+        .state-thinking     .panel-agent-id { color: var(--neon-yellow); }
+        .state-error        .panel-agent-id { color: var(--neon-red); }
+        .state-idle         .panel-agent-id { color: #666; }
+
+        /* Status badge */
+        .status-badge {
+            font-size: 0.6rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            white-space: nowrap;
+        }
+
+        .badge-orchestrator { background: #00fff520; color: var(--neon-cyan); border: 1px solid var(--neon-cyan); }
+        .badge-acting       { background: #39ff1420; color: var(--neon-green); border: 1px solid var(--neon-green); }
+        .badge-thinking     { background: #ffe60020; color: var(--neon-yellow); border: 1px solid var(--neon-yellow); }
+        .badge-error        { background: #ff003320; color: var(--neon-red); border: 1px solid var(--neon-red); }
+        .badge-idle         { background: #22222a;   color: #666; border: 1px solid #444; }
+
+        /* Thinking spinner */
+        @keyframes spinRing {
+            to { transform: rotate(360deg); }
+        }
+
+        .thinking-spinner {
+            display: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--neon-yellow);
+            animation: spinRing 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .state-thinking .thinking-spinner { display: block; }
+
+        /* Goal text */
+        .panel-goal {
+            font-size: 0.62rem;
+            color: #555;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* =====================================================
+           xterm Terminal Wrapper
+           ===================================================== */
+        .terminal-wrapper {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            min-height: 0;
+        }
+
+        .terminal-wrapper .xterm {
+            height: 100%;
+        }
+
+        .terminal-wrapper .xterm-viewport {
+            overflow-y: hidden !important;
+        }
+
+        /* Matrix rain canvas (loaded by matrix.js) */
+        .matrix-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none;
+            z-index: 0;
+        }
+
+        /* =====================================================
+           Event Log Footer
+           ===================================================== */
+        #event-log {
+            flex-shrink: 0;
+            height: 90px;
+            overflow-y: auto;
+            padding: 4px 12px;
+            background: rgba(0, 0, 0, 0.6);
+            border-top: 1px solid var(--neon-cyan);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--neon-green);
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            scroll-behavior: smooth;
+        }
+
+        #event-log::-webkit-scrollbar       { width: 4px; }
+        #event-log::-webkit-scrollbar-track { background: transparent; }
+        #event-log::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 2px; }
+
+        .log-entry { white-space: pre-wrap; word-break: break-all; }
+        .log-entry .log-ts  { color: #444; }
+        .log-entry .log-msg { color: var(--neon-green); }
+
+        /* =====================================================
+           Utility
+           ===================================================== */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Background canvases (populated by particles.js / hex renderer) -->
+    <canvas id="canvas-hex"></canvas>
+    <canvas id="canvas-particles"></canvas>
+
+    <!-- App shell -->
+    <div id="app">
+
+        <!-- ====== Header ====== -->
+        <header>
+            <div id="status-dot" class="disconnected"></div>
+            <h1>Agent Swarm Control</h1>
+            <span id="status-text">Disconnected</span>
+
+            <div class="header-spacer"></div>
+
+            <div class="header-stat">
+                <span class="label">Workers</span>
+                <span class="value" id="worker-count">0</span>
+            </div>
+
+            <div class="header-stat">
+                <span class="label">Tick</span>
+                <span class="value" id="tick-counter">0</span>
+            </div>
+        </header>
+
+        <!-- ====== Terminal Grid ====== -->
+        <div id="terminal-grid"></div>
+
+        <!-- ====== Event Log ====== -->
+        <div id="event-log" role="log" aria-live="polite" aria-label="Event log"></div>
+
+    </div><!-- /#app -->
+
+    <!-- xterm.js -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.10.0/lib/xterm-addon-fit.js"></script>
+
+    <!-- Optional visual layers — loaded independently; page works without them -->
+    <script>
+        (function () {
+            function loadScript(src) {
+                var s = document.createElement('script');
+                s.src = src;
+                s.onerror = function () {
+                    // Script not available yet — silent no-op
+                };
+                document.body.appendChild(s);
+            }
+            loadScript('/swarm/matrix.js');
+            loadScript('/swarm/particles.js');
+        }());
+    </script>
+
+    <script>
+        'use strict';
+
+        /* ============================================================
+           Constants
+           ============================================================ */
+        const MAX_LOG_ENTRIES = 100;
+        const WS_RECONNECT_MS = 3000;
+
+        /* ============================================================
+           State
+           ============================================================ */
+        const agents = {};   // agentId -> { panel, term, fitAddon, state }
+        let tickCounter = 0;
+
+        /* ============================================================
+           DOM References
+           ============================================================ */
+        const grid        = document.getElementById('terminal-grid');
+        const eventLog    = document.getElementById('event-log');
+        const statusDot   = document.getElementById('status-dot');
+        const statusText  = document.getElementById('status-text');
+        const workerCount = document.getElementById('worker-count');
+        const tickEl      = document.getElementById('tick-counter');
+
+        /* ============================================================
+           xterm.js theme
+           ============================================================ */
+        const XTERM_THEME = {
+            background:  '#12121a',
+            foreground:  '#c0ffe0',
+            cursor:      '#00fff5',
+            cursorAccent:'#0a0a0f',
+            black:       '#1a1a2a',
+            red:         '#ff0033',
+            green:       '#39ff14',
+            yellow:      '#ffe600',
+            blue:        '#007eff',
+            magenta:     '#ff00ff',
+            cyan:        '#00fff5',
+            white:       '#e0e0e0',
+            brightBlack: '#333355',
+        };
+
+        /* ============================================================
+           Panel Creation
+           ============================================================ */
+
+        /**
+         * Create an agent panel in the grid.
+         * @param {string} agentId
+         * @param {boolean} isOrchestrator
+         */
+        function createAgentPanel(agentId, isOrchestrator) {
+            if (agents[agentId]) {
+                return; // already exists
+            }
+
+            /* ---- Outer panel ---- */
+            const panel = document.createElement('div');
+            panel.className = 'agent-panel ' + (isOrchestrator ? 'orchestrator-panel state-orchestrator' : 'state-idle');
+            panel.dataset.agentId = agentId;
+
+            /* ---- Panel header ---- */
+            const panelHeader = document.createElement('div');
+            panelHeader.className = 'panel-header';
+
+            const agentIdEl = document.createElement('span');
+            agentIdEl.className = 'panel-agent-id';
+            agentIdEl.textContent = agentId;
+
+            const spinner = document.createElement('div');
+            spinner.className = 'thinking-spinner';
+            spinner.setAttribute('aria-hidden', 'true');
+
+            const badge = document.createElement('span');
+            badge.className = 'status-badge ' + (isOrchestrator ? 'badge-orchestrator' : 'badge-idle');
+            badge.textContent = isOrchestrator ? 'orchestrator' : 'idle';
+
+            const goalEl = document.createElement('span');
+            goalEl.className = 'panel-goal';
+            goalEl.textContent = '';
+
+            panelHeader.appendChild(agentIdEl);
+            panelHeader.appendChild(spinner);
+            panelHeader.appendChild(badge);
+            panelHeader.appendChild(goalEl);
+
+            /* ---- Terminal wrapper ---- */
+            const wrapper = document.createElement('div');
+            wrapper.className = 'terminal-wrapper';
+
+            /* Matrix canvas placeholder (matrix.js will activate it) */
+            const matrixCanvas = document.createElement('canvas');
+            matrixCanvas.className = 'matrix-canvas';
+            matrixCanvas.setAttribute('aria-hidden', 'true');
+            wrapper.appendChild(matrixCanvas);
+
+            /* ---- Assemble panel ---- */
+            panel.appendChild(panelHeader);
+            panel.appendChild(wrapper);
+            grid.appendChild(panel);
+
+            /* ---- xterm.js terminal ---- */
+            const term = new window.Terminal({
+                disableStdin: true,
+                cursorBlink: false,
+                theme: XTERM_THEME,
+                fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, monospace',
+                fontSize: 11,
+                scrollback: 500,
+            });
+
+            const fitAddon = new window.FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+            term.open(wrapper);
+
+            try {
+                fitAddon.fit();
+            } catch (_) { /* ignore if not yet visible */ }
+
+            /* ---- Store state ---- */
+            agents[agentId] = {
+                panel,
+                panelHeader,
+                badge,
+                goalEl,
+                term,
+                fitAddon,
+                isOrchestrator,
+                state: isOrchestrator ? 'orchestrator' : 'idle',
+            };
+
+            updateWorkerCount();
+        }
+
+        /* ============================================================
+           Panel Removal
+           ============================================================ */
+
+        /**
+         * Remove an agent panel from the grid.
+         * @param {string} agentId
+         */
+        function removeAgentPanel(agentId) {
+            const entry = agents[agentId];
+            if (!entry) return;
+
+            try {
+                entry.term.dispose();
+            } catch (_) { /* ignore */ }
+
+            if (entry.panel && entry.panel.parentNode) {
+                entry.panel.parentNode.removeChild(entry.panel);
+            }
+
+            delete agents[agentId];
+            updateWorkerCount();
+        }
+
+        /* ============================================================
+           State Update
+           ============================================================ */
+
+        /**
+         * Map agent status strings to CSS state class names.
+         * @param {string} status
+         * @param {boolean} isOrchestrator
+         * @returns {string}
+         */
+        function statusToStateClass(status, isOrchestrator) {
+            if (isOrchestrator) return 'state-orchestrator';
+            switch ((status || '').toLowerCase()) {
+                case 'acting':   return 'state-acting';
+                case 'thinking': return 'state-thinking';
+                case 'error':    return 'state-error';
+                default:         return 'state-idle';
+            }
+        }
+
+        /**
+         * Map agent status strings to badge class / label.
+         * @param {string} status
+         * @param {boolean} isOrchestrator
+         * @returns {{cls: string, label: string}}
+         */
+        function statusToBadge(status, isOrchestrator) {
+            if (isOrchestrator) return { cls: 'badge-orchestrator', label: 'orchestrator' };
+            switch ((status || '').toLowerCase()) {
+                case 'acting':   return { cls: 'badge-acting',   label: 'acting' };
+                case 'thinking': return { cls: 'badge-thinking', label: 'thinking' };
+                case 'error':    return { cls: 'badge-error',    label: 'error' };
+                default:         return { cls: 'badge-idle',     label: 'idle' };
+            }
+        }
+
+        /**
+         * Update an agent panel with new state data.
+         * @param {string} agentId
+         * @param {object} data  — snapshot data from the server
+         */
+        function updateAgentState(agentId, data) {
+            const entry = agents[agentId];
+            if (!entry) return;
+
+            const { panel, badge, goalEl, term, fitAddon, isOrchestrator } = entry;
+            const status    = data.status || 'idle';
+            const stateClass = statusToStateClass(status, isOrchestrator);
+            const badgeInfo  = statusToBadge(status, isOrchestrator);
+
+            /* Update state class — preserve base classes */
+            const baseClasses = ['agent-panel'];
+            if (isOrchestrator) baseClasses.push('orchestrator-panel');
+            panel.className = baseClasses.join(' ') + ' ' + stateClass;
+
+            /* Badge */
+            badge.className = 'status-badge ' + badgeInfo.cls;
+            badge.textContent = badgeInfo.label;
+
+            /* Goal */
+            goalEl.textContent = data.goal || '';
+
+            /* Terminal content */
+            if (data.screen_text != null) {
+                term.reset();
+                term.write(data.screen_text.replace(/\n/g, '\r\n'));
+            }
+
+            /* Refit in case panel size changed */
+            try { fitAddon.fit(); } catch (_) { /* ignore */ }
+
+            /* Pulse on acting state */
+            if (status === 'acting') {
+                triggerPulse(panel);
+            }
+
+            entry.state = status;
+        }
+
+        /* ============================================================
+           Pulse Animation
+           ============================================================ */
+
+        /**
+         * Briefly add pulse class to a panel then remove it.
+         * @param {HTMLElement} panel
+         */
+        function triggerPulse(panel) {
+            panel.classList.remove('pulse');
+            /* Force reflow so the animation restarts */
+            void panel.offsetWidth;
+            panel.classList.add('pulse');
+            setTimeout(function () {
+                panel.classList.remove('pulse');
+            }, 900);
+        }
+
+        /* ============================================================
+           Worker Count
+           ============================================================ */
+        function updateWorkerCount() {
+            const workers = Object.keys(agents).filter(function (id) {
+                return !agents[id].isOrchestrator;
+            });
+            workerCount.textContent = String(workers.length);
+        }
+
+        /* ============================================================
+           Event Log
+           ============================================================ */
+
+        /**
+         * Append a timestamped entry to the event log.
+         * Trims to MAX_LOG_ENTRIES.
+         * @param {string} text
+         */
+        function addEventLog(text) {
+            const now    = new Date();
+            const hh     = String(now.getHours()).padStart(2, '0');
+            const mm     = String(now.getMinutes()).padStart(2, '0');
+            const ss     = String(now.getSeconds()).padStart(2, '0');
+            const ts     = hh + ':' + mm + ':' + ss;
+
+            const entry  = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const tsSpan = document.createElement('span');
+            tsSpan.className = 'log-ts';
+            tsSpan.textContent = '[' + ts + '] ';
+
+            const msgSpan = document.createElement('span');
+            msgSpan.className = 'log-msg';
+            msgSpan.textContent = text;
+
+            entry.appendChild(tsSpan);
+            entry.appendChild(msgSpan);
+            eventLog.appendChild(entry);
+
+            /* Trim to max entries */
+            while (eventLog.childElementCount > MAX_LOG_ENTRIES) {
+                eventLog.removeChild(eventLog.firstElementChild);
+            }
+
+            /* Auto-scroll */
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        /* ============================================================
+           Swarm State Message Handler
+           ============================================================ */
+
+        /**
+         * Handle a swarm_state message.
+         * Creates/updates panels; removes panels for gone agents.
+         * @param {object} message
+         */
+        function handleSwarmState(message) {
+            const agentSnapshots = message.agents || {};
+
+            /* Create / update existing agents */
+            Object.keys(agentSnapshots).forEach(function (agentId) {
+                const snap          = agentSnapshots[agentId];
+                const isOrchestrator = (agentId === 'orchestrator');
+
+                if (!agents[agentId]) {
+                    createAgentPanel(agentId, isOrchestrator);
+                }
+
+                updateAgentState(agentId, snap);
+            });
+
+            /* Remove panels for agents no longer in the snapshot */
+            Object.keys(agents).forEach(function (agentId) {
+                if (!agentSnapshots[agentId]) {
+                    removeAgentPanel(agentId);
+                }
+            });
+
+            /* Bump tick counter */
+            tickCounter += 1;
+            tickEl.textContent = String(tickCounter);
+
+            updateWorkerCount();
+        }
+
+        /* ============================================================
+           Screen Message Handler
+           ============================================================ */
+
+        /**
+         * Handle a screen message targeting a single agent.
+         * @param {object} message
+         */
+        function handleScreen(message) {
+            const agentId = message.agent_id;
+            if (!agentId || !agents[agentId]) return;
+            const { term, fitAddon } = agents[agentId];
+            if (message.content != null) {
+                term.reset();
+                term.write(message.content.replace(/\n/g, '\r\n'));
+                try { fitAddon.fit(); } catch (_) { /* ignore */ }
+            }
+        }
+
+        /* ============================================================
+           Swarm Event Message Handler
+           ============================================================ */
+
+        /**
+         * Handle a swarm_event message.
+         * @param {object} message
+         */
+        function handleSwarmEvent(message) {
+            const event   = message.event   || 'event';
+            const agentId = message.agent_id || 'unknown';
+            const detail  = message.detail  || '';
+
+            const logText = event + ' | agent=' + agentId + (detail ? ' | ' + detail : '');
+            addEventLog(logText);
+
+            /* Visual feedback for specific events */
+            if (event === 'worker_spawned' && agents[agentId]) {
+                triggerPulse(agents[agentId].panel);
+            }
+        }
+
+        /* ============================================================
+           WebSocket Connection
+           ============================================================ */
+
+        function connect() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url      = protocol + '//' + location.hostname + ':' + location.port + '/swarm/ws';
+            let ws;
+
+            try {
+                ws = new WebSocket(url);
+            } catch (err) {
+                scheduleReconnect();
+                return;
+            }
+
+            ws.onopen = function () {
+                statusDot.className = 'connected';
+                statusText.textContent = 'Connected';
+                addEventLog('WebSocket connected to ' + url);
+            };
+
+            ws.onclose = function () {
+                statusDot.className = 'disconnected';
+                statusText.textContent = 'Disconnected';
+                addEventLog('WebSocket disconnected — reconnecting...');
+                scheduleReconnect();
+            };
+
+            ws.onerror = function () {
+                ws.close();
+            };
+
+            ws.onmessage = function (event) {
+                var message;
+                try {
+                    message = JSON.parse(event.data);
+                } catch (_) {
+                    return; // ignore malformed messages
+                }
+
+                switch (message.type) {
+                    case 'swarm_state':
+                        handleSwarmState(message);
+                        break;
+                    case 'swarm_event':
+                        handleSwarmEvent(message);
+                        break;
+                    case 'screen':
+                        handleScreen(message);
+                        break;
+                    default:
+                        /* Unknown message type — ignore */
+                        break;
+                }
+            };
+        }
+
+        function scheduleReconnect() {
+            setTimeout(connect, WS_RECONNECT_MS);
+        }
+
+        /* ============================================================
+           Window Resize — refit all terminals
+           ============================================================ */
+        window.addEventListener('resize', function () {
+            Object.keys(agents).forEach(function (agentId) {
+                try {
+                    agents[agentId].fitAddon.fit();
+                } catch (_) { /* ignore */ }
+            });
+        });
+
+        /* ============================================================
+           Bootstrap
+           ============================================================ */
+        addEventLog('Swarm Control UI initialised');
+        connect();
+
+    </script>
+</body>
+</html>
