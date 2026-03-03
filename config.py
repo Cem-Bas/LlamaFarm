@@ -1,6 +1,6 @@
 """Agent configuration."""
 
-MODEL = "qwen3-coder:30b"
+MODEL = "devstral-small-2"
 SCREEN_COLS = 120
 SCREEN_ROWS = 40
 SHELL = "/bin/bash"

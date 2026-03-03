@@ -100,7 +100,7 @@ class OllamaAgent:
                 model=self.model,
                 messages=messages,
                 format="json",
-                options={"temperature": 0.1, "num_predict": 256},
+                options={"temperature": 0.1, "num_predict": 256, "num_ctx": 8192},
             )
 
             content: str = response.message.content
