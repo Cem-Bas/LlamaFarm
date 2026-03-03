@@ -472,6 +472,7 @@
 
             /* ---- Outer panel ---- */
             const panel = document.createElement('div');
+            panel.id = 'panel-' + agentId;
             panel.className = 'agent-panel ' + (isOrchestrator ? 'orchestrator-panel state-orchestrator' : 'state-idle');
             panel.dataset.agentId = agentId;
 
@@ -559,6 +560,12 @@
         function removeAgentPanel(agentId) {
             const entry = agents[agentId];
             if (!entry) return;
+
+            /* Remove particle flow lines to/from this agent */
+            if (window.particleSystem) {
+                window.particleSystem.removeFlowLine('panel-orchestrator', 'panel-' + agentId);
+                window.particleSystem.removeFlowLine('panel-' + agentId, 'panel-orchestrator');
+            }
 
             try {
                 entry.term.dispose();
@@ -648,6 +655,23 @@
                 triggerPulse(panel);
             }
 
+            /* Matrix rain overlay — show on idle, hide on active */
+            if (typeof updateMatrixRain === 'function') {
+                updateMatrixRain(agentId, status);
+            }
+
+            /* Particle flash on state transitions */
+            if (entry.state !== status && window.particleSystem) {
+                var panelId = 'panel-' + agentId;
+                if (status === 'acting') {
+                    window.particleSystem.flash(panelId, '#39ff14');
+                } else if (status === 'thinking') {
+                    window.particleSystem.flash(panelId, '#ffe600');
+                } else if (status === 'error') {
+                    window.particleSystem.flash(panelId, '#ff0033');
+                }
+            }
+
             entry.state = status;
         }
 
@@ -735,9 +759,17 @@
             Object.keys(agentSnapshots).forEach(function (agentId) {
                 const snap          = agentSnapshots[agentId];
                 const isOrchestrator = (agentId === 'orchestrator');
+                const isNew          = !agents[agentId];
 
-                if (!agents[agentId]) {
+                if (isNew) {
                     createAgentPanel(agentId, isOrchestrator);
+
+                    /* Add particle flow line from orchestrator to new worker */
+                    if (!isOrchestrator && window.particleSystem) {
+                        window.particleSystem.addFlowLine(
+                            'panel-orchestrator', 'panel-' + agentId, '#00fff5'
+                        );
+                    }
                 }
 
                 updateAgentState(agentId, snap);
