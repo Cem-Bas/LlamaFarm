@@ -208,7 +208,34 @@ def main() -> None:
     import threading
     import uvicorn
 
-    agent = TerminalAgent(web_enabled=True)
+    parser = argparse.ArgumentParser(description="Ollama Terminal Agent")
+    parser.add_argument("--model", default=MODEL, help="Ollama model name")
+    parser.add_argument("--goal", default=None, help="Initial goal for the agent")
+    parser.add_argument("--no-web", action="store_true", help="Disable web UI")
+    parser.add_argument("--cols", type=int, default=SCREEN_COLS, help="Terminal columns")
+    parser.add_argument("--rows", type=int, default=SCREEN_ROWS, help="Terminal rows")
+    parser.add_argument("--shell", default=SHELL, help="Shell executable")
+    parser.add_argument("--port", type=int, default=WEB_PORT, help="Web UI port")
+    args = parser.parse_args()
+
+    agent = TerminalAgent(
+        model=args.model,
+        cols=args.cols,
+        rows=args.rows,
+        shell=args.shell,
+        web_enabled=not args.no_web,
+    )
+
+    # Seed conversation with goal if provided
+    if args.goal:
+        agent.ollama._history.append({
+            "role": "user",
+            "content": f"Your goal is: {args.goal}\nWork towards this goal autonomously.",
+        })
+        agent.ollama._history.append({
+            "role": "assistant",
+            "content": '{"action": "wait", "value": 1}',
+        })
 
     def signal_handler(sig, frame):
         agent.stop()
@@ -217,14 +244,15 @@ def main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
     # Start web server in background thread
-    server_thread = threading.Thread(
-        target=uvicorn.run,
-        args=(web_app,),
-        kwargs={"host": WEB_HOST, "port": WEB_PORT, "log_level": "warning"},
-        daemon=True,
-    )
-    server_thread.start()
-    print(f"[Web UI] http://localhost:{WEB_PORT}")
+    if not args.no_web:
+        server_thread = threading.Thread(
+            target=uvicorn.run,
+            args=(web_app,),
+            kwargs={"host": WEB_HOST, "port": args.port, "log_level": "warning"},
+            daemon=True,
+        )
+        server_thread.start()
+        print(f"[Web UI] http://localhost:{args.port}")
 
     agent.start()
     agent.run_loop()
