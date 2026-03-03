@@ -72,6 +72,7 @@ class TerminalAgent:
         self.running = False
         self.iteration = 0
         self.last_action: dict | None = None
+        self._uvicorn_loop = None  # set by main() after starting uvicorn
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -134,12 +135,18 @@ class TerminalAgent:
             return
         try:
             import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(
-                    web_broadcast(data.get("screen_text", ""), data.get("action", {}), data.get("iteration", 0))
+            # Schedule the coroutine on uvicorn's event loop (running in another thread)
+            loop = self._uvicorn_loop
+            if loop is not None and loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    web_broadcast(
+                        data.get("screen_text", ""),
+                        data.get("action", {}),
+                        data.get("iteration", 0),
+                    ),
+                    loop,
                 )
-        except RuntimeError:
+        except Exception:
             pass
 
     # ------------------------------------------------------------------
@@ -245,13 +252,26 @@ def main() -> None:
 
     # Start web server in background thread
     if not args.no_web:
-        server_thread = threading.Thread(
-            target=uvicorn.run,
-            args=(web_app,),
-            kwargs={"host": WEB_HOST, "port": args.port, "log_level": "warning"},
-            daemon=True,
-        )
+        import asyncio
+
+        loop_ready = threading.Event()
+
+        def _run_uvicorn():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            agent._uvicorn_loop = loop
+            loop_ready.set()
+            uvicorn.run(
+                web_app,
+                host=WEB_HOST,
+                port=args.port,
+                log_level="warning",
+                loop="asyncio",
+            )
+
+        server_thread = threading.Thread(target=_run_uvicorn, daemon=True)
         server_thread.start()
+        loop_ready.wait(timeout=5)
         print(f"[Web UI] http://localhost:{args.port}")
 
     agent.start()
