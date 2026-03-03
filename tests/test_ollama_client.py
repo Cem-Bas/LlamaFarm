@@ -5,7 +5,7 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock
 
-from ollama_client import OllamaAgent, SYSTEM_PROMPT
+from ollama_client import OllamaAgent, SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -297,3 +297,55 @@ class TestChatCallParameters:
         options = call_args[1]["options"]
         assert options["temperature"] == 0.1
         assert options["num_predict"] == 256
+
+
+# ---------------------------------------------------------------------------
+# 9. Orchestrator system prompt and command parsing
+# ---------------------------------------------------------------------------
+
+class TestOrchestratorPrompt:
+    """Tests for orchestrator system prompt and command parsing."""
+
+    def test_orchestrator_prompt_exists(self):
+        """ORCHESTRATOR_SYSTEM_PROMPT is a non-empty string."""
+        assert isinstance(ORCHESTRATOR_SYSTEM_PROMPT, str)
+        assert len(ORCHESTRATOR_SYSTEM_PROMPT) > 100
+
+    def test_orchestrator_prompt_mentions_commands(self):
+        """Prompt describes assign, spawn, kill, wait commands."""
+        for cmd in ["assign", "spawn", "kill", "wait"]:
+            assert cmd in ORCHESTRATOR_SYSTEM_PROMPT
+
+    def test_agent_uses_orchestrator_prompt(self):
+        """OllamaAgent with orchestrator=True uses ORCHESTRATOR_SYSTEM_PROMPT."""
+        agent = OllamaAgent(model="test", orchestrator=True)
+        messages = agent._build_messages("test screen")
+        assert messages[0]["content"] == ORCHESTRATOR_SYSTEM_PROMPT
+
+    def test_agent_default_uses_regular_prompt(self):
+        """OllamaAgent without orchestrator flag uses regular SYSTEM_PROMPT."""
+        agent = OllamaAgent(model="test", orchestrator=False)
+        messages = agent._build_messages("test screen")
+        assert "autonomous terminal agent" in messages[0]["content"].lower()
+
+    def test_parse_orchestrator_assign_command(self):
+        """Orchestrator assign command is valid JSON."""
+        import json
+        cmd = '{"command": "assign", "worker": "worker-01", "goal": "run ls"}'
+        parsed = json.loads(cmd)
+        assert parsed["command"] == "assign"
+        assert parsed["worker"] == "worker-01"
+
+    def test_parse_orchestrator_spawn_command(self):
+        """Orchestrator spawn command is valid JSON."""
+        import json
+        cmd = '{"command": "spawn", "shell_cmd": "ollama run llama3.2"}'
+        parsed = json.loads(cmd)
+        assert parsed["command"] == "spawn"
+
+    def test_parse_orchestrator_kill_command(self):
+        """Orchestrator kill command is valid JSON."""
+        import json
+        cmd = '{"command": "kill", "worker": "worker-02"}'
+        parsed = json.loads(cmd)
+        assert parsed["command"] == "kill"

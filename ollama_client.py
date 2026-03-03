@@ -7,6 +7,7 @@ Exports
 -------
 OllamaAgent  — conversation-aware agent that returns structured action dicts.
 SYSTEM_PROMPT — the system prompt defining agent behavior and JSON format.
+ORCHESTRATOR_SYSTEM_PROMPT — the system prompt for swarm orchestrator mode.
 """
 
 from __future__ import annotations
@@ -52,6 +53,39 @@ the result of a previous action.
 - If you are unsure what to do, use wait with a value of 2.\
 """
 
+ORCHESTRATOR_SYSTEM_PROMPT = """\
+You are a swarm orchestrator agent. You manage a team of worker agents, each \
+running in their own terminal. You read their status summaries and decide what \
+to do next. You MUST respond with ONLY a single JSON object — no markdown, \
+no explanation, no extra text.
+
+Your response must be one of these command formats:
+
+1. Assign a goal to a worker:
+   {"command": "assign", "worker": "<worker-id>", "goal": "<what the worker should do>"}
+
+2. Spawn a new worker:
+   {"command": "spawn", "shell_cmd": "<initial command to run in the new terminal>"}
+
+3. Kill a worker:
+   {"command": "kill", "worker": "<worker-id>"}
+
+4. Wait and observe:
+   {"command": "wait", "value": <seconds>}
+
+Worker summary format you receive:
+- worker-id: status (idle|thinking|acting|error), goal, last action, last 5 lines of screen
+
+Rules:
+- Always respond with valid JSON only.
+- Assign goals that involve running CLI tools like: ollama run <model>, gemini, codex, claude
+- Workers can type commands, press keys, and interact with any terminal program.
+- Use spawn to create new workers when you need more parallelism.
+- Use kill to clean up workers that are done or stuck.
+- Use wait when workers are busy and you need to observe progress.
+- If you have no workers, spawn one first.\
+"""
+
 # ---------------------------------------------------------------------------
 # Fallback action returned on any error
 # ---------------------------------------------------------------------------
@@ -76,11 +110,15 @@ class OllamaAgent:
     max_history : int
         Maximum number of message *pairs* (user + assistant) to retain
         in the rolling conversation window.
+    orchestrator : bool
+        When ``True``, use the orchestrator system prompt instead of the
+        default worker system prompt.
     """
 
-    def __init__(self, model: str, max_history: int = 20) -> None:
+    def __init__(self, model: str, max_history: int = 20, orchestrator: bool = False) -> None:
         self.model = model
         self.max_history = max_history
+        self.orchestrator = orchestrator
         self._history: list[dict[str, str]] = []
 
     # ------------------------------------------------------------------
@@ -126,8 +164,9 @@ class OllamaAgent:
 
     def _build_messages(self, screen_text: str) -> list[dict[str, str]]:
         """Assemble the full message list: system + history + current user."""
+        prompt = ORCHESTRATOR_SYSTEM_PROMPT if self.orchestrator else SYSTEM_PROMPT
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": prompt},
         ]
         messages.extend(self._history)
         messages.append({"role": "user", "content": screen_text})
