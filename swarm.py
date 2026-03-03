@@ -213,3 +213,145 @@ class SwarmManager:
                 self.workers[worker_id]["thread"] = thread
         thread.start()
         self._worker_threads[worker_id] = thread
+
+
+# ----------------------------------------------------------------------
+# Entry point
+# ----------------------------------------------------------------------
+
+def swarm_main() -> None:
+    import argparse
+    import asyncio
+    import signal
+    import sys
+    import threading
+    import uvicorn
+
+    from config import WEB_HOST, WEB_PORT, SWARM_BROADCAST_INTERVAL
+    from web.server import (
+        app as web_app,
+        broadcast_swarm_state,
+        broadcast_swarm_event,
+    )
+
+    parser = argparse.ArgumentParser(description="Ollama Agent Swarm")
+    parser.add_argument("--orchestrator-model", default=ORCHESTRATOR_MODEL,
+                        help="Ollama model for the orchestrator")
+    parser.add_argument("--worker-model", default=WORKER_MODEL,
+                        help="Ollama model for workers")
+    parser.add_argument("--max-workers", type=int, default=MAX_WORKERS,
+                        help="Max concurrent workers")
+    parser.add_argument("--port", type=int, default=WEB_PORT,
+                        help="Web UI port")
+    parser.add_argument("--goal", default=None,
+                        help="Initial goal for the orchestrator")
+    args = parser.parse_args()
+
+    manager = SwarmManager(
+        max_workers=args.max_workers,
+        orchestrator_model=args.orchestrator_model,
+        worker_model=args.worker_model,
+    )
+
+    # Seed orchestrator with initial goal
+    if args.goal:
+        manager.orchestrator.ollama._history.append({
+            "role": "user",
+            "content": f"Your goal is: {args.goal}\nYou have {args.max_workers} worker slots. Decide what to do.",
+        })
+        manager.orchestrator.ollama._history.append({
+            "role": "assistant",
+            "content": '{"command": "wait", "value": 2}',
+        })
+
+    def signal_handler(sig, frame):
+        print("\n[Swarm] Shutting down...")
+        manager.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Start web server in background thread
+    loop_ready = threading.Event()
+    uvicorn_loop = None
+
+    def _run_uvicorn():
+        nonlocal uvicorn_loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        uvicorn_loop = loop
+        loop_ready.set()
+        uvicorn.run(
+            web_app,
+            host=WEB_HOST,
+            port=args.port,
+            log_level="warning",
+            loop="asyncio",
+        )
+
+    server_thread = threading.Thread(target=_run_uvicorn, daemon=True)
+    server_thread.start()
+    loop_ready.wait(timeout=5)
+    print(f"[Swarm] Web UI: http://localhost:{args.port}/swarm")
+
+    # Main swarm loop
+    print(f"[Swarm] Orchestrator model: {manager.orchestrator_model}")
+    print(f"[Swarm] Worker model: {manager.worker_model}")
+    print(f"[Swarm] Max workers: {manager.max_workers}")
+    print(f"[Swarm] Starting orchestrator loop...")
+
+    tick = 0
+    while True:
+        try:
+            tick += 1
+
+            # Tick orchestrator
+            command = manager.tick_orchestrator()
+            print(f"[Swarm] Tick {tick}: {json.dumps(command)}")
+
+            # Broadcast swarm state
+            snapshots = manager.get_all_snapshots()
+            if uvicorn_loop and uvicorn_loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    broadcast_swarm_state(snapshots), uvicorn_loop
+                )
+
+                # Broadcast events for spawns/kills
+                cmd = command.get("command", "")
+                if cmd == "spawn":
+                    # Find the latest worker
+                    worker_ids = list(manager.workers.keys())
+                    if worker_ids:
+                        latest = worker_ids[-1]
+                        asyncio.run_coroutine_threadsafe(
+                            broadcast_swarm_event(
+                                "worker_spawned", latest,
+                                command.get("shell_cmd", "")
+                            ),
+                            uvicorn_loop,
+                        )
+                        # Start the worker's run loop
+                        manager._start_worker_thread(latest)
+                elif cmd == "kill":
+                    asyncio.run_coroutine_threadsafe(
+                        broadcast_swarm_event(
+                            "worker_killed", command.get("worker", ""), ""
+                        ),
+                        uvicorn_loop,
+                    )
+
+            time.sleep(SWARM_BROADCAST_INTERVAL)
+
+        except KeyboardInterrupt:
+            print("\n[Swarm] Interrupted.")
+            break
+        except Exception as e:
+            print(f"\n[Swarm] Error: {e}")
+            time.sleep(1)
+
+    manager.stop()
+    print("[Swarm] Stopped.")
+
+
+if __name__ == "__main__":
+    swarm_main()
