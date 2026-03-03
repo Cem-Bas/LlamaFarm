@@ -98,8 +98,17 @@ class TerminalAgent:
         self.pty.close()
 
     def get_snapshot(self) -> dict:
-        """Return a read-only snapshot of this agent's current state."""
-        screen_text = self.screen.get_text()
+        """Return a read-only snapshot of this agent's current state.
+
+        Reads the screen buffer directly to avoid resetting the _changed
+        flag, which would interfere with run_loop's change detection when
+        called from another thread (e.g. SwarmManager).
+        """
+        # Read screen display directly — do NOT call self.screen.get_text()
+        # because that resets self.screen._changed as a side-effect.
+        lines_raw = [self.screen._screen.display[row].rstrip()
+                     for row in range(self.screen._screen.lines)]
+        screen_text = "\n".join(lines_raw)
         # Last 5 non-empty lines as a compact summary
         lines = [l for l in screen_text.split("\n") if l.strip()]
         snippet = "\n".join(lines[-5:])
@@ -107,7 +116,7 @@ class TerminalAgent:
             "agent_id": self.agent_id,
             "status": self.status,
             "iteration": self.iteration,
-            "last_action": self.last_action,
+            "last_action": dict(self.last_action) if self.last_action is not None else None,
             "screen_text": snippet,
             "goal": self.goal,
         }
@@ -188,6 +197,8 @@ class TerminalAgent:
         last_text = ""
         while self.running and self.pty.is_alive():
             try:
+                self.status = "idle"
+
                 # --- Observe ---
                 screen_text = self.observe()
 
