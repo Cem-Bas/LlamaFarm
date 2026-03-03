@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ollama Terminal Agent</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: #16213e;
+            border-bottom: 2px solid #e94560;
+        }
+        header h1 {
+            font-size: 1.2rem;
+            color: #e94560;
+        }
+        #status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+        #status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #555;
+        }
+        #status-dot.connected { background: #4caf50; }
+        #status-dot.disconnected { background: #e94560; }
+        #terminal-container {
+            flex: 1;
+            padding: 10px;
+            overflow: hidden;
+        }
+        footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 20px;
+            background: #16213e;
+            border-top: 2px solid #e94560;
+            font-size: 0.85rem;
+        }
+        #last-action { color: #e0e0e0; }
+        #iteration { color: #e94560; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Ollama Terminal Agent</h1>
+        <div id="status">
+            <div id="status-dot" class="disconnected"></div>
+            <span id="status-text">Disconnected</span>
+        </div>
+    </header>
+    <div id="terminal-container"></div>
+    <footer>
+        <div id="last-action">Last action: —</div>
+        <div>Iteration: <span id="iteration">0</span></div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+    <script>
+        const term = new window.Terminal({
+            disableStdin: true,
+            cursorBlink: false,
+            theme: {
+                background: '#1a1a2e',
+                foreground: '#e0e0e0',
+                cursor: '#e94560',
+            },
+            fontFamily: '"Cascadia Code", Menlo, monospace',
+            fontSize: 14,
+        });
+
+        const fitAddon = new window.FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal-container'));
+        fitAddon.fit();
+        window.addEventListener('resize', () => fitAddon.fit());
+
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const lastActionEl = document.getElementById('last-action');
+        const iterationEl = document.getElementById('iteration');
+
+        function connect() {
+            const ws = new WebSocket(`ws://${location.hostname}:${location.port}/ws`);
+
+            ws.onopen = () => {
+                statusDot.className = 'connected';
+                statusText.textContent = 'Connected';
+            };
+
+            ws.onclose = () => {
+                statusDot.className = 'disconnected';
+                statusText.textContent = 'Disconnected';
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'screen' && data.content != null) {
+                    term.reset();
+                    term.write(data.content.replace(/\n/g, '\r\n'));
+                }
+                if (data.action) {
+                    lastActionEl.textContent = 'Last action: ' + JSON.stringify(data.action);
+                }
+                if (data.iteration != null) {
+                    iterationEl.textContent = data.iteration;
+                }
+            };
+        }
+
+        connect();
+    </script>
+</body>
+</html>

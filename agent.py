@@ -33,6 +33,7 @@ from keystroke_engine import encode_action
 from ollama_client import OllamaAgent
 from pty_manager import PTYManager
 from screen import TerminalScreen
+from web.server import broadcast as web_broadcast, app as web_app
 
 
 class TerminalAgent:
@@ -128,8 +129,18 @@ class TerminalAgent:
     # ------------------------------------------------------------------
 
     def _broadcast(self, event: str, data: dict) -> None:
-        """Placeholder for web UI broadcast — no-op until Task 6."""
-        pass
+        """Send screen state to WebSocket clients."""
+        if not self.web_enabled:
+            return
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(
+                    web_broadcast(data.get("screen_text", ""), data.get("action", {}), data.get("iteration", 0))
+                )
+        except RuntimeError:
+            pass
 
     # ------------------------------------------------------------------
     # Main loop
@@ -167,8 +178,9 @@ class TerminalAgent:
                 action = self.think(screen_text)
                 print(f"[Action] {json.dumps(action)}")
 
-                # --- Broadcast (no-op placeholder) ---
+                # --- Broadcast ---
                 self._broadcast("action", {
+                    "screen_text": screen_text,
                     "iteration": self.iteration,
                     "action": action,
                 })
@@ -192,14 +204,27 @@ class TerminalAgent:
 # ----------------------------------------------------------------------
 
 def main() -> None:
-    """Basic entry point — no argparse yet (see Task 7)."""
-    agent = TerminalAgent()
+    import argparse
+    import threading
+    import uvicorn
+
+    agent = TerminalAgent(web_enabled=True)
 
     def signal_handler(sig, frame):
         agent.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
+
+    # Start web server in background thread
+    server_thread = threading.Thread(
+        target=uvicorn.run,
+        args=(web_app,),
+        kwargs={"host": WEB_HOST, "port": WEB_PORT, "log_level": "warning"},
+        daemon=True,
+    )
+    server_thread.start()
+    print(f"[Web UI] http://localhost:{WEB_PORT}")
 
     agent.start()
     agent.run_loop()
