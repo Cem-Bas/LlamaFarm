@@ -54,6 +54,10 @@ class TerminalAgent:
         Maximum conversation history pairs for the Ollama agent.
     web_enabled : bool
         Whether the web UI broadcast is active (placeholder for Task 6).
+    agent_id : str
+        Unique identifier for this agent instance (used by swarm manager).
+    goal : str
+        High-level goal description for this agent.
     """
 
     def __init__(
@@ -64,7 +68,11 @@ class TerminalAgent:
         shell: str = SHELL,
         max_history: int = MAX_HISTORY,
         web_enabled: bool = True,
+        agent_id: str = "agent-0",
+        goal: str = "",
     ) -> None:
+        self.agent_id = agent_id
+        self.goal = goal
         self.pty = PTYManager(shell=shell, cols=cols, rows=rows)
         self.screen = TerminalScreen(cols=cols, rows=rows)
         self.ollama = OllamaAgent(model=model, max_history=max_history)
@@ -72,6 +80,7 @@ class TerminalAgent:
         self.running = False
         self.iteration = 0
         self.last_action: dict | None = None
+        self.status: str = "idle"
         self._uvicorn_loop = None  # set by main() after starting uvicorn
 
     # ------------------------------------------------------------------
@@ -87,6 +96,21 @@ class TerminalAgent:
         """Stop the agent and close the PTY."""
         self.running = False
         self.pty.close()
+
+    def get_snapshot(self) -> dict:
+        """Return a read-only snapshot of this agent's current state."""
+        screen_text = self.screen.get_text()
+        # Last 5 non-empty lines as a compact summary
+        lines = [l for l in screen_text.split("\n") if l.strip()]
+        snippet = "\n".join(lines[-5:])
+        return {
+            "agent_id": self.agent_id,
+            "status": self.status,
+            "iteration": self.iteration,
+            "last_action": self.last_action,
+            "screen_text": snippet,
+            "goal": self.goal,
+        }
 
     # ------------------------------------------------------------------
     # Observe-Think-Act
@@ -182,6 +206,7 @@ class TerminalAgent:
                 print("-" * 60)
 
                 # --- Think ---
+                self.status = "thinking"
                 action = self.think(screen_text)
                 print(f"[Action] {json.dumps(action)}")
 
@@ -193,12 +218,15 @@ class TerminalAgent:
                 })
 
                 # --- Act ---
+                self.status = "acting"
                 self.act(action)
+                self.status = "idle"
 
             except KeyboardInterrupt:
                 print("\n[Agent] Interrupted.")
                 break
             except Exception as e:
+                self.status = "error"
                 print(f"\n[Agent] Error: {e}")
                 time.sleep(1)
 

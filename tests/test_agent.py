@@ -8,6 +8,13 @@ from unittest.mock import patch, MagicMock
 from agent import TerminalAgent
 
 
+@pytest.fixture
+def agent():
+    with patch("agent.OllamaAgent"):
+        a = TerminalAgent(model="test", web_enabled=False)
+        yield a
+
+
 class TestTerminalAgentInit:
     """Tests for TerminalAgent construction."""
 
@@ -240,3 +247,70 @@ class TestTerminalAgentBroadcast:
         agent = TerminalAgent(model="test", web_enabled=False)
         # Should not raise, should be a no-op
         agent._broadcast("test", {"key": "value"})
+
+
+# --- Snapshot tests ---
+
+class TestGetSnapshot:
+    """Tests for TerminalAgent.get_snapshot()."""
+
+    def test_snapshot_returns_dict(self, agent):
+        """get_snapshot returns a dict with required keys."""
+        snap = agent.get_snapshot()
+        assert isinstance(snap, dict)
+        assert "agent_id" in snap
+        assert "status" in snap
+        assert "iteration" in snap
+        assert "last_action" in snap
+        assert "screen_text" in snap
+        assert "goal" in snap
+
+    def test_snapshot_default_values(self, agent):
+        """Snapshot has correct defaults before any loop runs."""
+        snap = agent.get_snapshot()
+        assert snap["status"] == "idle"
+        assert snap["iteration"] == 0
+        assert snap["last_action"] is None
+        assert snap["goal"] == ""
+
+    def test_snapshot_reflects_agent_id(self):
+        """Snapshot includes the agent_id set at construction."""
+        with patch("agent.PTYManager"):
+            with patch("agent.OllamaAgent"):
+                a = TerminalAgent(agent_id="worker-03", web_enabled=False)
+                snap = a.get_snapshot()
+                assert snap["agent_id"] == "worker-03"
+
+    def test_snapshot_reflects_iteration(self, agent):
+        """Snapshot reflects current iteration count."""
+        agent.iteration = 7
+        snap = agent.get_snapshot()
+        assert snap["iteration"] == 7
+
+    def test_snapshot_reflects_last_action(self, agent):
+        """Snapshot reflects last_action."""
+        agent.last_action = {"action": "type", "value": "ls"}
+        snap = agent.get_snapshot()
+        assert snap["last_action"] == {"action": "type", "value": "ls"}
+
+    def test_snapshot_reflects_goal(self):
+        """Snapshot reflects goal set at construction."""
+        with patch("agent.PTYManager"):
+            with patch("agent.OllamaAgent"):
+                a = TerminalAgent(agent_id="w1", goal="explore files", web_enabled=False)
+                snap = a.get_snapshot()
+                assert snap["goal"] == "explore files"
+
+    def test_snapshot_screen_text_snippet(self, agent):
+        """screen_text in snapshot is last 5 lines of screen."""
+        agent.screen.feed(b"line1\r\nline2\r\nline3\r\nline4\r\nline5\r\nline6\r\nline7\r\n")
+        snap = agent.get_snapshot()
+        # Should contain the last 5 non-empty lines
+        lines = [l for l in snap["screen_text"].split("\n") if l.strip()]
+        assert len(lines) <= 5
+
+    def test_snapshot_includes_status_field(self, agent):
+        """Status transitions are reflected in snapshot."""
+        agent.status = "thinking"
+        snap = agent.get_snapshot()
+        assert snap["status"] == "thinking"
