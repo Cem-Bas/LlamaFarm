@@ -234,7 +234,7 @@ def swarm_main() -> None:
         broadcast_swarm_event,
     )
 
-    parser = argparse.ArgumentParser(description="Ollama Agent Swarm")
+    parser = argparse.ArgumentParser(description="Clawllama Swarm")
     parser.add_argument("--orchestrator-model", default=ORCHESTRATOR_MODEL,
                         help="Ollama model for the orchestrator")
     parser.add_argument("--worker-model", default=WORKER_MODEL,

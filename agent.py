@@ -254,7 +254,7 @@ def main() -> None:
     import threading
     import uvicorn
 
-    parser = argparse.ArgumentParser(description="Ollama Terminal Agent")
+    parser = argparse.ArgumentParser(description="Clawllama")
     parser.add_argument("--model", default=MODEL, help="Ollama model name")
     parser.add_argument("--goal", default=None, help="Initial goal for the agent")
     parser.add_argument("--no-web", action="store_true", help="Disable web UI")
