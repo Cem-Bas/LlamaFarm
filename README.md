@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="web/logo.png" width="80" />
+  <img src="web/logo.png" width="120" />
 </p>
 
 <h1 align="center">LlamaFarm</h1>
