@@ -1,36 +1,23 @@
 <p align="center">
-  <img src="web/logo.png" width="120" />
+  <img src="web/logo.png" width="200" />
+  <h1 align="center">LlamaFarm</h1>
 </p>
-
-<h1 align="center">LlamaFarm</h1>
-
 <p align="center">
   <strong>AI agent swarm with an isometric pixel-art farm.</strong><br>
   One King. Eight llamas. Infinite chaos.
 </p>
-
 <p align="center">
   <a href="https://youtu.be/upiNgGM6HI4">Demo</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#how-it-works">How It Works</a> &middot;
   <a href="#supported-backends">Backends</a>
 </p>
-
-<br>
-
 <p align="center">
   <a href="https://youtu.be/upiNgGM6HI4">
     <img src="https://img.youtube.com/vi/upiNgGM6HI4/maxresdefault.jpg" width="720" alt="LlamaFarm Demo Video" />
   </a>
 </p>
-
 <p align="center"><em>Click to watch the demo</em></p>
-
-<br>
-
-<p align="center">
-  <img src="web/screenshot.png" width="900" alt="LlamaFarm Dashboard" />
-</p>
 
 ---
 
