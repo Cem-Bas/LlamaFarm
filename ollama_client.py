@@ -22,68 +22,51 @@ from ollama import chat
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
-You are an autonomous terminal agent. You observe the current terminal screen \
-and decide what to do next. You MUST respond with ONLY a single JSON object — \
-no markdown, no explanation, no extra text.
+You are an autonomous terminal agent on macOS with zsh. You have a GOAL and \
+you work step by step to accomplish it using shell commands. You observe the \
+terminal screen and decide your next action. Respond with ONLY a JSON object.
 
-Your response must be one of these four action formats:
+Actions (pick ONE):
 
-1. Type text into the terminal:
-   {"action": "type", "value": "<text to type>"}
+{"action": "type", "value": "ls -la"}     — type text (NO newline at end)
+{"action": "key", "value": "enter"}       — press a key to submit a command
+{"action": "wait", "value": 2}            — wait N seconds
 
-2. Press a single special key:
-   {"action": "key", "value": "<key name>"}
+You may add a "reply" field to ANY action to respond to [USER MESSAGE]:
+{"action": "type", "value": "ls", "reply": "Sure, listing files now."}
 
-3. Press a sequence of special keys:
-   {"action": "keys", "value": ["<key1>", "<key2>", ...]}
+WORKFLOW — To run a command, do TWO separate actions:
+  First:  {"action": "type", "value": "ls -la"}
+  Then:   {"action": "key", "value": "enter"}
 
-4. Wait and observe (seconds):
-   {"action": "wait", "value": <number>}
-
-Available keys: enter, tab, escape, backspace, delete, \
-up, down, left, right, home, end, pageup, pagedown, \
-f1-f12, ctrl+a through ctrl+z.
-
-Rules:
-- Always respond with valid JSON only.
-- After typing a command, send enter as a separate key action — do NOT \
-include a newline in the type value.
-- Use wait when output is still being generated or you need to observe \
-the result of a previous action.
-- If you are unsure what to do, use wait with a value of 2.\
+IMPORTANT RULES:
+- When you see a shell prompt (ending with % or $), type a command. Do NOT wait.
+- NEVER send ctrl+c, ctrl+z, or ctrl+\\. These are FORBIDDEN.
+- NEVER use the "keys" action. Only use "type", "key", or "wait".
+- Only use "wait" AFTER running a command, to let output appear.
+- Work toward your assigned GOAL. Each action should make progress.
+- Read command output before running the next command.
+- NEVER use rm, sudo, kill, shutdown, reboot, mkfs, dd, or any destructive commands.
+- NEVER access /etc/passwd, /etc/shadow, or other sensitive system files.
+- Safe commands: ls, cat, find, head, tail, wc, du, df, ps, echo, pwd, whoami, \
+grep, date, uptime, env, which, file, stat, tree, uname, sw_vers, top -l 1.\
 """
 
 ORCHESTRATOR_SYSTEM_PROMPT = """\
-You are a swarm orchestrator agent. You manage a team of worker agents, each \
-running in their own terminal. You read their status summaries and decide what \
-to do next. You MUST respond with ONLY a single JSON object — no markdown, \
-no explanation, no extra text.
+You are a swarm orchestrator on macOS. You manage AI-powered terminal workers.
+Read worker status and decide what to do. Respond with ONLY ONE JSON object.
 
-Your response must be one of these command formats:
+Commands: spawn, assign, kill, wait
+Keys: command, shell_cmd, worker, goal, value, reply
 
-1. Assign a goal to a worker:
-   {"command": "assign", "worker": "<worker-id>", "goal": "<what the worker should do>"}
-
-2. Spawn a new worker:
-   {"command": "spawn", "shell_cmd": "<initial command to run in the new terminal>"}
-
-3. Kill a worker:
-   {"command": "kill", "worker": "<worker-id>"}
-
-4. Wait and observe:
-   {"command": "wait", "value": <seconds>}
-
-Worker summary format you receive:
-- worker-id: status (idle|thinking|acting|error), goal, last action, last 5 lines of screen
-
-Rules:
-- Always respond with valid JSON only.
-- Assign goals that involve running CLI tools like: ollama run <model>, gemini, codex, claude
-- Workers can type commands, press keys, and interact with any terminal program.
-- Use spawn to create new workers when you need more parallelism.
-- Use kill to clean up workers that are done or stuck.
-- Use wait when workers are busy and you need to observe progress.
-- If you have no workers, spawn one first.\
+RULES:
+- If 0 workers exist, spawn ONE to accomplish the mission.
+- If workers are already working (status=acting), you MUST use wait.
+- NEVER spawn duplicate workers for the same goal.
+- NEVER repeat your last command. Check YOUR LAST COMMAND.
+- Only kill workers that have finished or errored.
+- Include reply when answering USER MESSAGES.
+- When in doubt, wait.\
 """
 
 # ---------------------------------------------------------------------------
@@ -119,6 +102,7 @@ class OllamaAgent:
         self.model = model
         self.max_history = max_history
         self.orchestrator = orchestrator
+        self.goal: str = ""
         self._history: list[dict[str, str]] = []
 
     # ------------------------------------------------------------------
@@ -165,6 +149,9 @@ class OllamaAgent:
     def _build_messages(self, screen_text: str) -> list[dict[str, str]]:
         """Assemble the full message list: system + history + current user."""
         prompt = ORCHESTRATOR_SYSTEM_PROMPT if self.orchestrator else SYSTEM_PROMPT
+        # Inject goal into system prompt so the model always knows what to do
+        if self.goal and not self.orchestrator:
+            prompt += f"\n\nYour GOAL: {self.goal}\nWork toward this goal step by step."
         messages: list[dict[str, str]] = [
             {"role": "system", "content": prompt},
         ]

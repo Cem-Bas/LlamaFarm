@@ -16,6 +16,7 @@ import time
 from typing import Optional
 
 from agent import TerminalAgent
+from cli_agent import TerminalCLIAgent
 from config import (
     MAX_WORKERS,
     ORCHESTRATOR_MODEL,
@@ -25,6 +26,7 @@ from config import (
     SHELL,
     MAX_HISTORY,
     SWARM_BROADCAST_INTERVAL,
+    is_cli_agent,
 )
 
 
@@ -58,27 +60,47 @@ class SwarmManager:
         self._lock = threading.Lock()
         self._worker_counter = 0
         self._worker_threads: dict[str, threading.Thread] = {}
+        self._pending_messages: list[str] = []  # user messages queued for next tick
 
         # Create orchestrator agent
         self.orchestrator = TerminalAgent(
             model=orchestrator_model,
             agent_id="orchestrator",
-            goal="Coordinate workers",
+            goal="",
             web_enabled=False,
         )
-        # Set the orchestrator's OllamaAgent to use orchestrator mode
-        self.orchestrator.ollama.orchestrator = True
 
-    def spawn_worker(self, goal: str = "", shell_cmd: str = "") -> Optional[str]:
-        """Spawn a new worker agent. Returns worker_id or None if at max."""
+        # Create the orchestrator decision engine
+        if is_cli_agent(orchestrator_model):
+            cli_name = orchestrator_model.replace("-cli", "")
+            self._orch_agent = TerminalCLIAgent(
+                cli_name=cli_name,
+                orchestrator=True,
+            )
+        else:
+            from ollama_client import OllamaAgent
+            self._orch_agent = OllamaAgent(
+                model=orchestrator_model,
+                orchestrator=True,
+            )
+
+    def spawn_worker(self, goal: str = "", shell_cmd: str = "", model: str = "") -> Optional[str]:
+        """Spawn a new worker agent. Returns worker_id or None if at max.
+
+        Parameters
+        ----------
+        model : str
+            If provided, overrides ``self.worker_model`` for this worker.
+        """
         with self._lock:
             if len(self.workers) >= self.max_workers:
                 return None
             self._worker_counter += 1
-            worker_id = f"worker-{self._worker_counter:02d}"
+            worker_id = f"llama-{self._worker_counter:02d}"
 
+        use_model = model if model else self.worker_model
         agent = TerminalAgent(
-            model=self.worker_model,
+            model=use_model,
             agent_id=worker_id,
             goal=goal,
             web_enabled=False,
@@ -90,6 +112,7 @@ class SwarmManager:
                 "goal": goal,
                 "shell_cmd": shell_cmd,
                 "thread": None,
+                "spawn_time": time.time(),
             }
 
         return worker_id
@@ -101,6 +124,31 @@ class SwarmManager:
         if worker is not None:
             worker["agent"].stop()
 
+    def kill_all(self) -> dict:
+        """Kill switch — stop ALL workers and pause the orchestrator.
+
+        Returns a summary dict with counts of what was killed.
+        """
+        with self._lock:
+            worker_ids = list(self.workers.keys())
+        killed = []
+        for wid in worker_ids:
+            self.kill_worker(wid)
+            killed.append(wid)
+        # Clear orchestrator history so it starts fresh
+        self._orch_agent._history.clear()
+        self.orchestrator.status = "idle"
+        self.orchestrator.iteration = 0
+        return {
+            "killed_workers": killed,
+            "count": len(killed),
+        }
+
+    def queue_message(self, message: str) -> None:
+        """Queue a user message for the orchestrator's next tick."""
+        with self._lock:
+            self._pending_messages.append(message)
+
     def assign_goal(self, worker_id: str, goal: str) -> None:
         """Assign a new goal to an existing worker."""
         with self._lock:
@@ -109,21 +157,18 @@ class SwarmManager:
             self.workers[worker_id]["goal"] = goal
             agent = self.workers[worker_id]["agent"]
         agent.goal = goal
-        # Seed the worker's Ollama history with the new goal
-        agent.ollama._history.append({
-            "role": "user",
-            "content": f"Your goal is: {goal}\nWork towards this goal autonomously.",
-        })
-        agent.ollama._history.append({
-            "role": "assistant",
-            "content": '{"action": "wait", "value": 1}',
-        })
+        if hasattr(agent, 'ollama'):
+            agent.ollama.goal = goal
 
     def get_all_snapshots(self) -> dict:
         """Collect snapshots from all agents (orchestrator + workers)."""
         snapshots = {}
-        # Orchestrator snapshot
-        snapshots["orchestrator"] = self.orchestrator.get_snapshot()
+        # Orchestrator snapshot — build a useful one from the decision engine
+        snap = self.orchestrator.get_snapshot()
+        snap["model"] = self._orch_agent.model
+        if self.orchestrator.last_action:
+            snap["screen_text"] = json.dumps(self.orchestrator.last_action)
+        snapshots["orchestrator"] = snap
         # Worker snapshots
         with self._lock:
             worker_items = list(self.workers.items())
@@ -145,40 +190,101 @@ class SwarmManager:
             self.kill_worker(command.get("worker", ""))
         elif cmd == "wait":
             pass  # No-op — orchestrator is waiting
+        elif cmd == "reply":
+            pass  # Reply-only — handled by the web layer
         # Unknown commands are silently ignored
 
     def build_orchestrator_input(self) -> str:
-        """Format all worker snapshots into a text summary for the orchestrator."""
+        """Format all worker snapshots into a compact text summary for the orchestrator."""
         snapshots = self.get_all_snapshots()
-        lines = ["=== SWARM STATUS ===", ""]
+        lines = ["SWARM STATUS:"]
+
+        # Include goal if set
+        if self.orchestrator.goal:
+            lines.append(f"MISSION: {self.orchestrator.goal}")
+
+        n_workers = len(snapshots) - 1  # exclude orchestrator
+        lines.append(f"Workers: {n_workers}/{self.max_workers}")
+        lines.append("")
+
         for agent_id, snap in snapshots.items():
             if agent_id == "orchestrator":
                 continue
-            lines.append(f"Worker: {agent_id}")
-            lines.append(f"  Status: {snap.get('status', 'unknown')}")
-            lines.append(f"  Goal: {snap.get('goal', 'none')}")
-            lines.append(f"  Iteration: {snap.get('iteration', 0)}")
-            action = snap.get("last_action")
-            lines.append(f"  Last Action: {json.dumps(action) if action else 'none'}")
-            lines.append(f"  Screen (last 5 lines):")
-            screen = snap.get("screen_text", "")
-            if screen:
-                for line in screen.split("\n"):
-                    lines.append(f"    {line}")
-            else:
-                lines.append("    (empty)")
+            status = snap.get("status", "unknown")
+            goal = snap.get("goal", "none")
+            screen = snap.get("screen_text", "").strip()
+            last_3 = "\n".join(screen.split("\n")[-3:]) if screen else "(empty)"
+            # Show age so orchestrator knows new workers need time
+            with self._lock:
+                worker_data = self.workers.get(agent_id, {})
+            spawn_time = worker_data.get("spawn_time", 0)
+            age_secs = int(time.time() - spawn_time) if spawn_time else 0
+            lines.append(f"[{agent_id}] status={status} goal={goal} age={age_secs}s")
+            lines.append(f"  screen: {last_3}")
             lines.append("")
-        if len(snapshots) <= 1:
-            lines.append("No workers active. Use spawn to create one.")
+
+        if n_workers == 0 and self.orchestrator.goal:
+            lines.append("No workers yet. Spawn one to accomplish the mission.")
+        elif n_workers == 0:
+            lines.append("No mission set. Wait for user instructions.")
+        else:
+            # Check if any workers are actively working
+            busy = [aid for aid, s in snapshots.items()
+                    if aid != "orchestrator" and s.get("status") in ("acting", "thinking")]
+            if busy:
+                lines.append(f"WORKERS BUSY: {', '.join(busy)}. You MUST use wait.")
+
+        # Show last command so orchestrator doesn't repeat itself
+        if self.orchestrator.last_action:
+            lines.append(f"YOUR LAST COMMAND: {json.dumps(self.orchestrator.last_action)}")
+            lines.append("Do NOT repeat the same command.")
+
+        # Include any pending user messages
+        with self._lock:
+            messages = list(self._pending_messages)
+            self._pending_messages.clear()
+        if messages:
             lines.append("")
-        lines.append(f"Active workers: {len(snapshots) - 1}/{self.max_workers}")
+            lines.append("USER MESSAGES:")
+            for msg in messages:
+                lines.append(f"  > {msg}")
+
+        lines.append("")
+        lines.append("Reply with ONE JSON command.")
         return "\n".join(lines)
 
     def tick_orchestrator(self) -> dict:
         """Run one orchestrator decision cycle. Returns the command dict."""
+        # No mission and no pending user messages → skip entirely, just wait
+        has_messages = bool(self._pending_messages)
+        if not self.orchestrator.goal and not has_messages and not self.workers:
+            self.orchestrator.status = "idle"
+            return {"command": "wait", "value": 2}
+
+        self.orchestrator.status = "thinking"
+        self.orchestrator.iteration += 1
         input_text = self.build_orchestrator_input()
-        command = self.orchestrator.ollama.decide(input_text)
+        command = self._orch_agent.decide(input_text)
+
+        # Block spawn if no mission and no user instruction
+        cmd = command.get("command", "")
+        if cmd == "spawn" and not self.orchestrator.goal and not has_messages:
+            print("[Swarm] BLOCKED: no mission set, not spawning")
+            command = {"command": "wait", "value": 2}
+
+        # Dedup: if workers exist and model wants to spawn the same goal again, force wait
+        if cmd == "spawn" and self.workers:
+            new_goal = command.get("goal", "").lower().strip()
+            with self._lock:
+                existing_goals = [w["goal"].lower().strip() for w in self.workers.values()]
+            if new_goal and any(new_goal in g or g in new_goal for g in existing_goals):
+                print(f"[Swarm] DEDUP: blocked duplicate spawn for '{command.get('goal', '')}'")
+                command = {"command": "wait", "value": 3}
+
+        self.orchestrator.status = "acting"
+        self.orchestrator.last_action = command
         self.process_command(command)
+        self.orchestrator.status = "idle"
         return command
 
     def start(self) -> None:
@@ -192,22 +298,127 @@ class SwarmManager:
         for wid in worker_ids:
             self.kill_worker(wid)
         self.orchestrator.stop()
+        # Close CLI orchestrator PTY if applicable
+        if hasattr(self._orch_agent, 'close'):
+            self._orch_agent.close()
 
     def _start_worker_thread(self, worker_id: str) -> None:
-        """Start a worker's run_loop in a background thread."""
+        """Start a worker in a background thread.
+
+        CLI agents (codex-cli, claude-cli, gemini-cli): runs the CLI tool
+        directly in the worker PTY. The CLI handles command execution
+        autonomously. Worker loop just observes for status reporting.
+
+        Ollama agents: uses the original observe-think-act loop where the
+        Ollama model decides actions and the agent types them into the shell.
+        """
         with self._lock:
             if worker_id not in self.workers:
                 return
             agent = self.workers[worker_id]["agent"]
+            goal = self.workers[worker_id].get("goal", "")
+            shell_cmd = self.workers[worker_id].get("shell_cmd", "")
 
-        def _run():
+        def _run_cli():
+            """CLI agent path — run the CLI tool in the PTY."""
             try:
                 agent.start()
-                agent.run_loop()
-            except Exception:
+                time.sleep(0.5)
+
+                # Build prompt from goal and/or shell_cmd
+                if goal and shell_cmd:
+                    cli_prompt = f"{goal}. Start by running: {shell_cmd}"
+                elif goal:
+                    cli_prompt = goal
+                elif shell_cmd:
+                    cli_prompt = f"Run this command: {shell_cmd}"
+                else:
+                    cli_prompt = "Await instructions"
+
+                # Determine which CLI to launch
+                cli_name = agent.ollama.cli_name if hasattr(agent.ollama, 'cli_name') else "codex"
+                safe_prompt = cli_prompt.replace("'", "'\\''")
+
+                if cli_name == "codex":
+                    cli_cmd = f"codex --dangerously-skip-permissions '{safe_prompt}'\n"
+                elif cli_name == "claude":
+                    # Use -p (print) mode for non-interactive execution
+                    cli_cmd = f"claude -p --dangerously-skip-permissions '{safe_prompt}'\n"
+                elif cli_name == "gemini":
+                    cli_cmd = f"gemini '{safe_prompt}'\n"
+                else:
+                    cli_cmd = f"{cli_name} '{safe_prompt}'\n"
+
+                agent.pty.write(cli_cmd.encode())
+                agent.status = "acting"
+
+                # Observe loop — read screen for status reporting
+                # Also auto-handle any remaining CLI prompts
+                accepted = False
+                while agent.running and agent.pty.is_alive():
+                    data = agent.pty.read(timeout=0.5)
+                    if data:
+                        agent.screen.feed(data)
+                        agent.iteration += 1
+
+                        # Check full screen buffer for prompts (not just current chunk)
+                        if not accepted:
+                            screen_text = "\n".join(
+                                agent.screen._screen.display[row]
+                                for row in range(agent.screen._screen.lines)
+                            )
+                            # Auto-answer acceptance dialogs by sending the number
+                            if "Yes, I accept" in screen_text:
+                                time.sleep(0.5)
+                                agent.pty.write(b"2\r")  # send "2" for Yes option
+                                accepted = True
+                            elif "trust this project" in screen_text.lower():
+                                time.sleep(0.5)
+                                agent.pty.write(b"1\r")  # trust project
+                                accepted = True
+                    time.sleep(0.2)
+
+            except Exception as e:
+                print(f"[Worker {worker_id}] Error: {e}")
                 agent.status = "error"
 
-        thread = threading.Thread(target=_run, daemon=True, name=f"swarm-{worker_id}")
+        def _run_ollama():
+            """Ollama agent path — runs worker_agent.py inside the PTY."""
+            try:
+                agent.start()
+                time.sleep(0.5)
+
+                # Build the goal from goal and/or shell_cmd
+                if goal and shell_cmd:
+                    agent_goal = f"{goal}. Start by running: {shell_cmd}"
+                elif goal:
+                    agent_goal = goal
+                elif shell_cmd:
+                    agent_goal = f"Run this command: {shell_cmd}"
+                else:
+                    agent_goal = "Await instructions"
+
+                # Launch the Ollama worker agent inside the PTY
+                model = agent.ollama.model
+                safe_goal = agent_goal.replace("'", "'\\''")
+                cmd = f"python worker_agent.py --model '{model}' --goal '{safe_goal}'\n"
+                agent.pty.write(cmd.encode())
+                agent.status = "acting"
+
+                # Observe loop — read the screen for status reporting
+                while agent.running and agent.pty.is_alive():
+                    data = agent.pty.read(timeout=0.5)
+                    if data:
+                        agent.screen.feed(data)
+                        agent.iteration += 1
+                    time.sleep(0.2)
+
+            except Exception as e:
+                print(f"[Worker {worker_id}] Error: {e}")
+                agent.status = "error"
+
+        target = _run_cli if agent._is_cli else _run_ollama
+        thread = threading.Thread(target=target, daemon=True, name=f"swarm-{worker_id}")
         with self._lock:
             if worker_id in self.workers:
                 self.workers[worker_id]["thread"] = thread
@@ -232,6 +443,8 @@ def swarm_main() -> None:
         app as web_app,
         broadcast_swarm_state,
         broadcast_swarm_event,
+        set_swarm_manager,
+        get_uvicorn_loop,
     )
 
     parser = argparse.ArgumentParser(description="Clawllama Swarm")
@@ -253,16 +466,13 @@ def swarm_main() -> None:
         worker_model=args.worker_model,
     )
 
-    # Seed orchestrator with initial goal
+    # Register manager with web layer so UI commands can reach it
+    set_swarm_manager(manager)
+
+    # Set the mission goal on both the orchestrator agent and the CLI agent
     if args.goal:
-        manager.orchestrator.ollama._history.append({
-            "role": "user",
-            "content": f"Your goal is: {args.goal}\nYou have {args.max_workers} worker slots. Decide what to do.",
-        })
-        manager.orchestrator.ollama._history.append({
-            "role": "assistant",
-            "content": '{"command": "wait", "value": 2}',
-        })
+        manager.orchestrator.goal = args.goal
+        manager._orch_agent.goal = args.goal
 
     def signal_handler(sig, frame):
         print("\n[Swarm] Shutting down...")
@@ -272,26 +482,24 @@ def swarm_main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
     # Start web server in background thread
-    loop_ready = threading.Event()
-    uvicorn_loop = None
+    server_ready = threading.Event()
 
     def _run_uvicorn():
-        nonlocal uvicorn_loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        uvicorn_loop = loop
-        loop_ready.set()
         uvicorn.run(
             web_app,
             host=WEB_HOST,
             port=args.port,
             log_level="warning",
-            loop="asyncio",
         )
 
     server_thread = threading.Thread(target=_run_uvicorn, daemon=True)
     server_thread.start()
-    loop_ready.wait(timeout=5)
+
+    # Wait for uvicorn to start and capture its real event loop
+    for _ in range(50):
+        time.sleep(0.1)
+        if get_uvicorn_loop() is not None:
+            break
     print(f"[Swarm] Web UI: http://localhost:{args.port}/swarm")
 
     # Main swarm loop
@@ -311,10 +519,17 @@ def swarm_main() -> None:
 
             # Broadcast swarm state
             snapshots = manager.get_all_snapshots()
-            if uvicorn_loop and uvicorn_loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    broadcast_swarm_state(snapshots), uvicorn_loop
+            print(f"[Swarm] Snapshot keys: {list(snapshots.keys())} workers: {list(manager.workers.keys())}")
+            loop = get_uvicorn_loop()
+            if loop is not None and loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(
+                    broadcast_swarm_state(snapshots, tick=tick), loop
                 )
+                # Check broadcast result for errors
+                try:
+                    fut.result(timeout=2)
+                except Exception as e:
+                    print(f"[Swarm] broadcast error: {e}")
 
                 # Broadcast events for spawns/kills
                 cmd = command.get("command", "")
@@ -328,7 +543,7 @@ def swarm_main() -> None:
                                 "worker_spawned", latest,
                                 command.get("shell_cmd", "")
                             ),
-                            uvicorn_loop,
+                            loop,
                         )
                         # Start the worker's run loop
                         manager._start_worker_thread(latest)
@@ -337,7 +552,7 @@ def swarm_main() -> None:
                         broadcast_swarm_event(
                             "worker_killed", command.get("worker", ""), ""
                         ),
-                        uvicorn_loop,
+                        loop,
                     )
 
             time.sleep(SWARM_BROADCAST_INTERVAL)

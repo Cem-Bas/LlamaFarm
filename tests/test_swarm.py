@@ -149,6 +149,82 @@ class TestSwarmManagerSnapshots:
             assert s1 is not s2
 
 
+class TestSwarmManagerKillAll:
+    """Tests for kill_all (kill switch)."""
+
+    def test_kill_all_removes_all_workers(self):
+        """kill_all removes every worker from the dict."""
+        with patch("swarm.TerminalAgent"):
+            sm = SwarmManager(max_workers=4, web_enabled=False)
+            sm.spawn_worker(goal="a")
+            sm.spawn_worker(goal="b")
+            sm.spawn_worker(goal="c")
+            assert len(sm.workers) == 3
+            result = sm.kill_all()
+            assert len(sm.workers) == 0
+            assert result["count"] == 3
+
+    def test_kill_all_returns_killed_ids(self):
+        """kill_all returns a list of killed worker IDs."""
+        with patch("swarm.TerminalAgent"):
+            sm = SwarmManager(max_workers=4, web_enabled=False)
+            sm.spawn_worker(goal="a")
+            sm.spawn_worker(goal="b")
+            result = sm.kill_all()
+            assert "worker-01" in result["killed_workers"]
+            assert "worker-02" in result["killed_workers"]
+
+    def test_kill_all_stops_each_agent(self):
+        """kill_all calls stop() on every worker agent."""
+        with patch("swarm.TerminalAgent") as MockAgent:
+            # Each call to TerminalAgent() returns a fresh mock
+            mock_agents = [MagicMock(), MagicMock(), MagicMock()]
+            MockAgent.side_effect = mock_agents
+            sm = SwarmManager(max_workers=4, web_enabled=False)
+            # mock_agents[0] is the orchestrator
+            sm.spawn_worker(goal="a")   # mock_agents[1]
+            sm.spawn_worker(goal="b")   # mock_agents[2]
+            sm.kill_all()
+            mock_agents[1].stop.assert_called_once()
+            mock_agents[2].stop.assert_called_once()
+
+    def test_kill_all_clears_orchestrator_history(self):
+        """kill_all clears the orchestrator's conversation history."""
+        with patch("swarm.TerminalAgent"):
+            sm = SwarmManager(max_workers=4, web_enabled=False)
+            sm._orch_agent._history.append({"role": "user", "content": "test"})
+            sm.kill_all()
+            assert len(sm._orch_agent._history) == 0
+
+    def test_kill_all_resets_orchestrator_status(self):
+        """kill_all resets orchestrator status to idle."""
+        with patch("swarm.TerminalAgent"):
+            sm = SwarmManager(max_workers=4, web_enabled=False)
+            sm.orchestrator.status = "thinking"
+            sm.kill_all()
+            assert sm.orchestrator.status == "idle"
+
+    def test_kill_all_with_no_workers(self):
+        """kill_all is safe when no workers exist."""
+        with patch("swarm.TerminalAgent"):
+            sm = SwarmManager(max_workers=4, web_enabled=False)
+            result = sm.kill_all()
+            assert result["count"] == 0
+            assert result["killed_workers"] == []
+
+    def test_can_spawn_after_kill_all(self):
+        """Workers can be spawned again after kill_all."""
+        with patch("swarm.TerminalAgent"):
+            sm = SwarmManager(max_workers=2, web_enabled=False)
+            sm.spawn_worker(goal="a")
+            sm.spawn_worker(goal="b")
+            assert sm.spawn_worker(goal="c") is None  # at max
+            sm.kill_all()
+            wid = sm.spawn_worker(goal="d")
+            assert wid is not None
+            assert len(sm.workers) == 1
+
+
 class TestSwarmManagerOrchestratorCommand:
     """Tests for processing orchestrator commands."""
 

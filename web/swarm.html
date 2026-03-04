@@ -3,35 +3,41 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clawllama Swarm Control</title>
+    <title>Clawllama Llama Farm</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet" />
 
     <!-- xterm.js -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.5.0/css/xterm.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 
     <style>
         /* =====================================================
-           CSS Variables — Neon Cyberpunk Palette
+           CSS Variables — Llama Farm Game Palette
            ===================================================== */
         :root {
-            --neon-cyan:     #00fff5;
-            --neon-green:    #39ff14;
-            --neon-yellow:   #ffe600;
-            --neon-red:      #ff0033;
-            --neon-magenta:  #ff00ff;
-            --bg-dark:       #0a0a0f;
-            --bg-panel:      #12121a;
-            --border-default:#2a2a3a;
+            --farm-brown:     #8B6B3D;
+            --farm-brown-dk:  #6B4C2A;
+            --farm-brown-lt:  #A68B5B;
+            --farm-green:     #5DAA3E;
+            --farm-green-lt:  #7EC850;
+            --farm-green-dk:  #3D7A2A;
+            --farm-cream:     #FFF8E7;
+            --farm-parchment: #F5E6C8;
+            --farm-gold:      #FFD700;
+            --farm-red:       #E85D4A;
+            --farm-pink:      #FF9CAA;
+            --farm-sky:       #87CEEB;
+            --farm-wood:      #C4956A;
+            --farm-wood-dk:   #8B6B3D;
+            --farm-text:      #4A3728;
+            --farm-text-lt:   #7A6B5A;
 
-            --glow-cyan:     0 0 6px #00fff5, 0 0 16px #00fff566;
-            --glow-green:    0 0 6px #39ff14, 0 0 16px #39ff1466;
-            --glow-yellow:   0 0 6px #ffe600, 0 0 16px #ffe60066;
-            --glow-red:      0 0 6px #ff0033, 0 0 16px #ff003366;
-            --glow-magenta:  0 0 6px #ff00ff, 0 0 16px #ff00ff66;
+            --shadow-warm:    0 2px 8px rgba(107, 76, 42, 0.25);
+            --shadow-card:    0 3px 12px rgba(107, 76, 42, 0.2), 0 1px 3px rgba(107, 76, 42, 0.1);
+            --shadow-button:  0 3px 0 rgba(107, 76, 42, 0.35);
         }
 
         /* =====================================================
@@ -47,13 +53,13 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: var(--bg-dark);
-            color: var(--neon-cyan);
-            font-family: 'JetBrains Mono', monospace;
+            background: #87CEEB;
+            color: var(--farm-text);
+            font-family: 'Fredoka', sans-serif;
         }
 
         /* =====================================================
-           Background canvases (particle + hex grid)
+           Background canvases (hidden for farm theme)
            ===================================================== */
         #canvas-hex,
         #canvas-particles {
@@ -63,6 +69,7 @@
             width: 100%;
             height: 100%;
             pointer-events: none;
+            opacity: 0;
         }
 
         #canvas-hex        { z-index: 0; }
@@ -79,140 +86,280 @@
             height: 100vh;
         }
 
+        #content-body {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* Left column: farm on top, console on bottom (the "L" shape) */
+        #content-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            order: 1;
+        }
+
         /* =====================================================
-           Header
+           Header — Wooden Barn Sign
            ===================================================== */
         header {
             display: flex;
             align-items: center;
-            gap: 18px;
-            padding: 10px 20px;
-            background: rgba(10, 10, 15, 0.85);
-            border-bottom: 1px solid var(--neon-cyan);
-            box-shadow: var(--glow-cyan);
+            gap: 14px;
+            padding: 0 20px;
+            height: 56px;
+            background: linear-gradient(180deg, #C4956A 0%, #A67B50 60%, #8B6B3D 100%);
+            border-bottom: 3px solid var(--farm-brown-dk);
+            box-shadow: 0 3px 10px rgba(107, 76, 42, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
             flex-shrink: 0;
+            position: relative;
+            z-index: 10;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent 0px,
+                rgba(107, 76, 42, 0.06) 2px,
+                transparent 4px,
+                rgba(255, 255, 255, 0.03) 8px,
+                transparent 10px
+            );
+            pointer-events: none;
+        }
+
+        .header-logo {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 3px solid var(--farm-cream);
+            box-shadow: 0 2px 6px rgba(107, 76, 42, 0.4);
+            transition: transform 0.3s;
+        }
+
+        .header-logo:hover {
+            transform: scale(1.1) rotate(-5deg);
         }
 
         header h1 {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.15rem;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1.3rem;
             font-weight: 700;
-            letter-spacing: 0.2em;
-            color: var(--neon-cyan);
-            text-shadow: var(--glow-cyan);
-            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--farm-cream);
+            text-shadow: 0 2px 4px rgba(107, 76, 42, 0.5);
         }
 
-        /* Status dot */
         #status-dot {
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #555;
+            background: #999;
             flex-shrink: 0;
-            transition: background 0.3s;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transition: background 0.3s, box-shadow 0.3s;
         }
 
-        #status-dot.connected    { background: var(--neon-green); box-shadow: var(--glow-green); }
-        #status-dot.disconnected { background: var(--neon-red);   box-shadow: var(--glow-red); }
+        #status-dot.connected    { background: var(--farm-green-lt); box-shadow: 0 0 8px rgba(126, 200, 80, 0.6); }
+        #status-dot.disconnected { background: var(--farm-red); box-shadow: 0 0 6px rgba(232, 93, 74, 0.4); }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.15); }
+        }
+        #status-dot.connected { animation: statusPulse 2s ease-in-out infinite; }
 
         #status-text {
-            font-size: 0.75rem;
-            color: #888;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: rgba(255, 248, 231, 0.7);
         }
 
-        /* Worker count & tick counter */
         .header-stat {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 1px;
-            margin-left: 12px;
+            gap: 6px;
+            padding: 4px 14px;
+            border-radius: 20px;
+            background: rgba(74, 55, 40, 0.5);
+            border: 2px solid rgba(255, 248, 231, 0.2);
         }
 
         .header-stat .label {
             font-size: 0.6rem;
-            color: #555;
-            letter-spacing: 0.1em;
+            font-weight: 600;
+            color: rgba(255, 248, 231, 0.6);
+            letter-spacing: 0.05em;
             text-transform: uppercase;
         }
 
         .header-stat .value {
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Fredoka', sans-serif;
             font-size: 1rem;
             font-weight: 700;
-            color: var(--neon-yellow);
-            text-shadow: var(--glow-yellow);
+            color: var(--farm-gold);
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            min-width: 18px;
+            text-align: center;
         }
 
-        /* Push stats to the right */
         .header-spacer { flex: 1; }
+
+        /* =====================================================
+           Console Panel — Bottom DevTools-style drawer
+           ===================================================== */
+        #console-panel {
+            display: flex;
+            flex-direction: column;
+            height: 280px;
+            min-height: 120px;
+            max-height: 60vh;
+            background: linear-gradient(180deg, #D4B896 0%, #C4A882 50%, #B89A72 100%);
+            border-top: 3px solid var(--farm-brown-dk);
+            box-shadow: 0 -4px 16px rgba(107, 76, 42, 0.25);
+            flex-shrink: 0;
+            overflow: hidden;
+            transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        #console-panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                rgba(107, 76, 42, 0.04) 1px,
+                transparent 2px,
+                rgba(255, 255, 255, 0.02) 40px,
+                transparent 41px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        #console-panel > * { position: relative; z-index: 1; }
+
+        #console-panel.collapsed {
+            height: 0;
+            min-height: 0;
+            border-top-color: transparent;
+            box-shadow: none;
+        }
+
+        #console-panel.collapsed #terminal-grid,
+        #console-panel.collapsed #event-log,
+        #console-panel.collapsed #console-resize-handle {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #console-resize-handle {
+            height: 6px;
+            cursor: ns-resize;
+            background: rgba(139, 107, 61, 0.15);
+            border-bottom: 1px solid rgba(139, 107, 61, 0.25);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        #console-resize-handle:hover {
+            background: rgba(139, 107, 61, 0.3);
+        }
+
+        #console-resize-handle::after {
+            content: '';
+            width: 40px;
+            height: 2px;
+            border-radius: 2px;
+            background: var(--farm-brown-lt);
+        }
 
         /* =====================================================
            Terminal Grid
            ===================================================== */
         #terminal-grid {
             flex: 1;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-auto-rows: 1fr;
-            gap: 8px;
-            padding: 8px;
-            overflow: hidden;
+            display: flex;
+            flex-direction: row;
+            gap: 6px;
+            padding: 6px;
+            overflow-x: auto;
+            overflow-y: hidden;
             min-height: 0;
         }
 
+        #terminal-grid::-webkit-scrollbar       { height: 6px; }
+        #terminal-grid::-webkit-scrollbar-track  { background: rgba(139, 107, 61, 0.1); border-radius: 3px; }
+        #terminal-grid::-webkit-scrollbar-thumb  { background: var(--farm-wood); border-radius: 3px; }
+
         /* =====================================================
-           Agent Panels
+           Agent Panels — Barn Stall Cards
            ===================================================== */
         .agent-panel {
             position: relative;
             display: flex;
             flex-direction: column;
-            background: var(--bg-panel);
-            border: 1px solid var(--border-default);
-            border-radius: 6px;
+            background: var(--farm-parchment);
+            border: 2px solid var(--farm-brown-lt);
+            border-radius: 10px;
             overflow: hidden;
-            transition: border-color 0.3s, box-shadow 0.3s;
+            transition: border-color 0.3s, box-shadow 0.3s, transform 0.2s;
+            min-width: 300px;
+            width: 360px;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-card);
         }
 
-        /* Orchestrator always spans two rows */
         .agent-panel.orchestrator-panel {
-            grid-column: 1;
-            grid-row: 1 / 3;
+            min-width: 400px;
+            width: 420px;
         }
 
-        /* ---- State classes ---- */
         .agent-panel.state-orchestrator {
-            border-color: var(--neon-cyan);
-            box-shadow: var(--glow-cyan);
+            border-color: var(--farm-gold);
+            box-shadow: var(--shadow-card), 0 0 0 1px var(--farm-gold);
         }
 
         .agent-panel.state-acting {
-            border-color: var(--neon-green);
-            box-shadow: var(--glow-green);
+            border-color: var(--farm-green);
+            box-shadow: var(--shadow-card), 0 0 12px rgba(93, 170, 62, 0.3);
         }
 
         .agent-panel.state-thinking {
-            border-color: var(--neon-yellow);
-            box-shadow: var(--glow-yellow);
+            border-color: var(--farm-gold);
+            box-shadow: var(--shadow-card), 0 0 12px rgba(255, 215, 0, 0.25);
         }
 
         .agent-panel.state-error {
-            border-color: var(--neon-red);
-            box-shadow: var(--glow-red);
+            border-color: var(--farm-red);
+            box-shadow: var(--shadow-card), 0 0 12px rgba(232, 93, 74, 0.3);
         }
 
         .agent-panel.state-idle {
-            border-color: #333344;
-            box-shadow: none;
+            border-color: #D4C4A8;
+            box-shadow: var(--shadow-card);
         }
 
-        /* Border pulse on action */
         @keyframes borderPulse {
-            0%   { box-shadow: 0 0 20px #39ff14cc, 0 0 40px #39ff1488; }
-            60%  { box-shadow: 0 0 8px #39ff1488,  0 0 20px #39ff1444; }
-            100% { box-shadow: var(--glow-green); }
+            0%   { box-shadow: var(--shadow-card), 0 0 20px rgba(93, 170, 62, 0.5); }
+            60%  { box-shadow: var(--shadow-card), 0 0 8px rgba(93, 170, 62, 0.2); }
+            100% { box-shadow: var(--shadow-card), 0 0 12px rgba(93, 170, 62, 0.3); }
         }
 
         .agent-panel.pulse {
@@ -226,66 +373,77 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 5px 10px;
-            background: rgba(0, 0, 0, 0.4);
-            border-bottom: 1px solid var(--border-default);
+            padding: 6px 10px;
+            background: linear-gradient(180deg, rgba(196, 149, 106, 0.3) 0%, rgba(196, 149, 106, 0.15) 100%);
+            border-bottom: 1px solid rgba(139, 107, 61, 0.2);
             flex-shrink: 0;
         }
 
         .panel-agent-id {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 0.65rem;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.7rem;
             font-weight: 700;
-            letter-spacing: 0.12em;
-            color: var(--neon-cyan);
+            letter-spacing: 0.05em;
+            color: var(--farm-brown-dk);
             text-transform: uppercase;
             white-space: nowrap;
         }
 
-        .state-orchestrator .panel-agent-id { color: var(--neon-cyan); }
-        .state-acting       .panel-agent-id { color: var(--neon-green); }
-        .state-thinking     .panel-agent-id { color: var(--neon-yellow); }
-        .state-error        .panel-agent-id { color: var(--neon-red); }
-        .state-idle         .panel-agent-id { color: #666; }
+        .state-orchestrator .panel-agent-id { color: #B8860B; }
+        .state-acting       .panel-agent-id { color: var(--farm-green-dk); }
+        .state-thinking     .panel-agent-id { color: #CC9900; }
+        .state-error        .panel-agent-id { color: var(--farm-red); }
+        .state-idle         .panel-agent-id { color: #999; }
 
-        /* Status badge */
         .status-badge {
-            font-size: 0.6rem;
-            padding: 1px 6px;
-            border-radius: 3px;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.58rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.04em;
             white-space: nowrap;
         }
 
-        .badge-orchestrator { background: #00fff520; color: var(--neon-cyan); border: 1px solid var(--neon-cyan); }
-        .badge-acting       { background: #39ff1420; color: var(--neon-green); border: 1px solid var(--neon-green); }
-        .badge-thinking     { background: #ffe60020; color: var(--neon-yellow); border: 1px solid var(--neon-yellow); }
-        .badge-error        { background: #ff003320; color: var(--neon-red); border: 1px solid var(--neon-red); }
-        .badge-idle         { background: #22222a;   color: #666; border: 1px solid #444; }
+        .panel-model-badge {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.52rem;
+            font-weight: 500;
+            padding: 1px 6px;
+            border-radius: 8px;
+            white-space: nowrap;
+            background: rgba(107, 181, 214, 0.15);
+            color: #4A8BA8;
+            border: 1px solid rgba(107, 181, 214, 0.3);
+        }
 
-        /* Thinking spinner */
+        .badge-orchestrator { background: rgba(255, 215, 0, 0.2); color: #B8860B; border: 1px solid rgba(255, 215, 0, 0.4); }
+        .badge-acting       { background: rgba(93, 170, 62, 0.15); color: var(--farm-green-dk); border: 1px solid rgba(93, 170, 62, 0.3); }
+        .badge-thinking     { background: rgba(255, 215, 0, 0.15); color: #CC9900; border: 1px solid rgba(255, 215, 0, 0.3); }
+        .badge-error        { background: rgba(232, 93, 74, 0.15); color: var(--farm-red); border: 1px solid rgba(232, 93, 74, 0.3); }
+        .badge-idle         { background: rgba(139, 107, 61, 0.1); color: #999; border: 1px solid rgba(139, 107, 61, 0.2); }
+
         @keyframes spinRing {
             to { transform: rotate(360deg); }
         }
 
         .thinking-spinner {
             display: none;
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
-            border: 2px solid transparent;
-            border-top-color: var(--neon-yellow);
-            animation: spinRing 0.7s linear infinite;
+            border: 2.5px solid rgba(255, 215, 0, 0.2);
+            border-top-color: var(--farm-gold);
+            animation: spinRing 0.8s linear infinite;
             flex-shrink: 0;
         }
 
         .state-thinking .thinking-spinner { display: block; }
 
-        /* Goal text */
         .panel-goal {
-            font-size: 0.62rem;
-            color: #555;
+            font-size: 0.65rem;
+            color: var(--farm-text-lt);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -311,7 +469,6 @@
             overflow-y: hidden !important;
         }
 
-        /* Matrix rain canvas (loaded by matrix.js) */
         .matrix-canvas {
             position: absolute;
             top: 0;
@@ -324,36 +481,986 @@
         }
 
         /* =====================================================
-           Event Log Footer
+           Event Log — Parchment Scroll
            ===================================================== */
         #event-log {
             flex-shrink: 0;
-            height: 90px;
+            width: 260px;
+            min-width: 180px;
             overflow-y: auto;
-            padding: 4px 12px;
-            background: rgba(0, 0, 0, 0.6);
-            border-top: 1px solid var(--neon-cyan);
+            padding: 8px 12px;
+            background: linear-gradient(180deg, #F0DFC0 0%, #E8D4B0 100%);
+            border-left: 2px solid var(--farm-brown-lt);
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.68rem;
-            color: var(--neon-green);
+            font-size: 0.58rem;
+            color: var(--farm-text);
             display: flex;
             flex-direction: column;
-            gap: 1px;
+            gap: 2px;
             scroll-behavior: smooth;
+            transition: opacity 0.3s;
         }
 
-        #event-log::-webkit-scrollbar       { width: 4px; }
-        #event-log::-webkit-scrollbar-track { background: transparent; }
-        #event-log::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 2px; }
+        #console-content {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        #event-log::-webkit-scrollbar       { width: 5px; }
+        #event-log::-webkit-scrollbar-track { background: rgba(139, 107, 61, 0.1); border-radius: 3px; }
+        #event-log::-webkit-scrollbar-thumb { background: var(--farm-wood); border-radius: 3px; }
 
         .log-entry { white-space: pre-wrap; word-break: break-all; }
-        .log-entry .log-ts  { color: #444; }
-        .log-entry .log-msg { color: var(--neon-green); }
+        .log-entry .log-ts  { color: var(--farm-brown-lt); }
+        .log-entry .log-msg { color: var(--farm-text); }
+
+        /* =====================================================
+           Sidebar — Wooden Barn Door Panel
+           ===================================================== */
+        #sidebar {
+            position: relative;
+            width: 340px;
+            min-width: 340px;
+            background: linear-gradient(180deg, #D4B896 0%, #C4A882 50%, #B89A72 100%);
+            border-left: 3px solid var(--farm-brown-dk);
+            box-shadow: -4px 0 16px rgba(107, 76, 42, 0.25);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow: hidden;
+            order: 2; /* sidebar on right */
+            transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s, box-shadow 0.3s;
+        }
+
+        #sidebar::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                rgba(107, 76, 42, 0.04) 1px,
+                transparent 2px,
+                rgba(255, 255, 255, 0.02) 40px,
+                transparent 41px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        #sidebar > * { position: relative; z-index: 1; }
+
+        #sidebar.collapsed {
+            width: 0;
+            min-width: 0;
+            border-left-color: transparent;
+            box-shadow: none;
+        }
+
+        #sidebar.collapsed .sb-scroll {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #sidebar-toggle {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--farm-cream);
+            background: rgba(74, 55, 40, 0.4);
+            border: 2px solid rgba(255, 248, 231, 0.25);
+            border-radius: 20px;
+            padding: 6px 16px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            flex-shrink: 0;
+        }
+
+        #sidebar-toggle:hover {
+            background: rgba(74, 55, 40, 0.6);
+            border-color: rgba(255, 248, 231, 0.5);
+            transform: translateY(-1px);
+        }
+
+        #sidebar-toggle.active {
+            background: rgba(255, 248, 231, 0.15);
+            border-color: var(--farm-cream);
+            box-shadow: 0 2px 8px rgba(107, 76, 42, 0.3);
+        }
+
+        #settings-toggle {
+            font-size: 1.1rem;
+            color: var(--farm-cream);
+            background: rgba(74, 55, 40, 0.4);
+            border: 2px solid rgba(255, 248, 231, 0.25);
+            border-radius: 50%;
+            width: 34px;
+            height: 34px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #settings-toggle:hover {
+            background: rgba(74, 55, 40, 0.6);
+            border-color: rgba(255, 248, 231, 0.5);
+            transform: rotate(30deg);
+        }
+
+        #settings-toggle.active {
+            background: rgba(255, 248, 231, 0.15);
+            border-color: var(--farm-cream);
+        }
+
+        .sb-scroll {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            opacity: 1;
+            transition: opacity 0.2s ease;
+        }
+
+        .sb-scroll::-webkit-scrollbar       { width: 5px; }
+        .sb-scroll::-webkit-scrollbar-track  { background: rgba(139, 107, 61, 0.1); border-radius: 3px; }
+        .sb-scroll::-webkit-scrollbar-thumb  { background: var(--farm-brown); border-radius: 3px; }
+
+        .sb-divider {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--farm-brown-dk);
+            padding: 10px 14px 6px;
+            border-bottom: 2px dashed rgba(139, 107, 61, 0.25);
+            background: rgba(139, 107, 61, 0.08);
+        }
+
+        .sb-divider.t-cyan    { color: var(--farm-brown-dk); }
+        .sb-divider.t-magenta { color: var(--farm-red); border-bottom-color: rgba(232, 93, 74, 0.2); }
+
+        .sb-section {
+            padding: 10px 14px 12px;
+            border-bottom: 1px solid rgba(139, 107, 61, 0.15);
+        }
+
+        .sb-section-title {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sb-section-title.t-cyan    { color: var(--farm-brown-dk); }
+        .sb-section-title.t-green   { color: var(--farm-green-dk); }
+        .sb-section-title.t-yellow  { color: #CC9900; }
+        .sb-section-title.t-magenta { color: var(--farm-red); }
+
+        .sb-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .sb-row:last-child { margin-bottom: 0; }
+
+        /* --- Inputs — Parchment style --- */
+        .sb-select,
+        .sb-input {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.72rem;
+            color: var(--farm-text);
+            background: var(--farm-cream);
+            border: 2px solid var(--farm-brown-lt);
+            border-radius: 10px;
+            padding: 6px 12px;
+            outline: none;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            height: 34px;
+            width: 100%;
+        }
+
+        .sb-select:focus,
+        .sb-input:focus {
+            border-color: var(--farm-green);
+            box-shadow: 0 0 0 3px rgba(93, 170, 62, 0.15);
+        }
+
+        .sb-select {
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%238B6B3D' d='M2 3l3 4 3-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            padding-right: 24px;
+        }
+
+        .sb-select option {
+            background: var(--farm-cream);
+            color: var(--farm-text);
+        }
+
+        .sb-input::placeholder {
+            color: var(--farm-brown-lt);
+        }
+
+        /* --- Buttons — Chunky Game Style --- */
+        .sb-btn {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 10px;
+            padding: 7px 0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            height: 34px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sb-btn:active { transform: translateY(2px); box-shadow: none !important; }
+        .sb-btn:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.5); }
+
+        .sb-btn-green {
+            color: white;
+            background: linear-gradient(180deg, var(--farm-green-lt) 0%, var(--farm-green) 100%);
+            box-shadow: 0 3px 0 var(--farm-green-dk), var(--shadow-warm);
+        }
+
+        .sb-btn-yellow {
+            color: var(--farm-brown-dk);
+            background: linear-gradient(180deg, #FFE44D 0%, var(--farm-gold) 100%);
+            box-shadow: 0 3px 0 #CC9900, var(--shadow-warm);
+        }
+
+        .sb-btn-cyan {
+            color: white;
+            background: linear-gradient(180deg, #6BB5D6 0%, #4A9BBF 100%);
+            box-shadow: 0 3px 0 #357A9A, var(--shadow-warm);
+        }
+
+        .sb-btn-magenta {
+            color: white;
+            background: linear-gradient(180deg, #FF9CAA 0%, #E85D6F 100%);
+            box-shadow: 0 3px 0 #C44455, var(--shadow-warm);
+        }
+
+        .sb-btn-green:hover:not(:disabled)  { filter: brightness(1.08); transform: translateY(-1px); }
+        .sb-btn-yellow:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+        .sb-btn-cyan:hover:not(:disabled)   { filter: brightness(1.08); transform: translateY(-1px); }
+        .sb-btn-magenta:hover:not(:disabled){ filter: brightness(1.08); transform: translateY(-1px); }
+
+        .sb-btn-sm {
+            width: auto;
+            padding: 4px 10px;
+            font-size: 0.65rem;
+            min-width: 34px;
+            flex-shrink: 0;
+            border-radius: 8px;
+        }
+
+        @keyframes spinOnce { to { transform: rotate(360deg); } }
+        .sb-btn-sm.loading { animation: spinOnce 0.6s linear; pointer-events: none; }
+
+        .sb-status {
+            font-size: 0.62rem;
+            color: var(--farm-text-lt);
+            min-height: 13px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sb-status.ok  { color: var(--farm-green-dk); }
+        .sb-status.err { color: var(--farm-red); }
+
+        /* =====================================================
+           Orch Chat Panel — floating over farm
+           ===================================================== */
+        #orch-chat {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            width: 380px;
+            max-height: 420px;
+            background: linear-gradient(180deg, rgba(212, 184, 150, 0.97) 0%, rgba(196, 168, 130, 0.97) 100%);
+            border: 3px solid var(--farm-brown-dk);
+            border-radius: 14px;
+            box-shadow: 0 6px 24px rgba(74, 55, 40, 0.45), 0 2px 6px rgba(74, 55, 40, 0.2);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+
+        #orch-chat.collapsed {
+            max-height: 38px;
+        }
+
+        #orch-chat.collapsed #chat-messages,
+        #orch-chat.collapsed #chat-input-row {
+            display: none;
+        }
+
+        #chat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: linear-gradient(180deg, #C4956A 0%, #A67B50 100%);
+            border-bottom: 2px solid var(--farm-brown-dk);
+            cursor: pointer;
+            flex-shrink: 0;
+            user-select: none;
+        }
+
+        #chat-header:hover {
+            filter: brightness(1.05);
+        }
+
+        #chat-header-icon {
+            font-size: 1rem;
+        }
+
+        #chat-header-title {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--farm-cream);
+            text-shadow: 0 1px 2px rgba(74, 55, 40, 0.4);
+            letter-spacing: 0.04em;
+        }
+
+        #chat-header-badge {
+            margin-left: auto;
+            font-size: 0.6rem;
+            font-weight: 600;
+            color: rgba(255, 248, 231, 0.7);
+            background: rgba(74, 55, 40, 0.35);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        #chat-header-toggle {
+            font-size: 0.7rem;
+            color: rgba(255, 248, 231, 0.6);
+            transition: transform 0.3s;
+        }
+
+        #orch-chat.collapsed #chat-header-toggle {
+            transform: rotate(180deg);
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 300px;
+            min-height: 80px;
+        }
+
+        #chat-messages::-webkit-scrollbar       { width: 4px; }
+        #chat-messages::-webkit-scrollbar-track  { background: rgba(139, 107, 61, 0.1); border-radius: 2px; }
+        #chat-messages::-webkit-scrollbar-thumb  { background: var(--farm-brown-lt); border-radius: 2px; }
+
+        .chat-msg {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            line-height: 1.4;
+            padding: 6px 10px;
+            border-radius: 10px;
+            max-width: 90%;
+            word-break: break-word;
+            animation: chatFadeIn 0.2s ease;
+        }
+
+        @keyframes chatFadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-msg.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--farm-green-lt), var(--farm-green));
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-msg.orch {
+            align-self: flex-start;
+            background: var(--farm-cream);
+            color: var(--farm-text);
+            border: 1px solid rgba(139, 107, 61, 0.2);
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-msg.system {
+            align-self: center;
+            background: rgba(139, 107, 61, 0.1);
+            color: var(--farm-text-lt);
+            font-size: 0.6rem;
+            font-style: italic;
+            border-radius: 8px;
+        }
+
+        .chat-msg-ts {
+            font-size: 0.5rem;
+            color: rgba(0, 0, 0, 0.35);
+            margin-top: 2px;
+        }
+
+        .chat-msg.user .chat-msg-ts { color: rgba(255, 255, 255, 0.5); }
+
+        #chat-input-row {
+            display: flex;
+            gap: 6px;
+            padding: 8px 10px;
+            border-top: 2px solid rgba(139, 107, 61, 0.2);
+            background: rgba(139, 107, 61, 0.06);
+            flex-shrink: 0;
+        }
+
+        #chat-input {
+            flex: 1;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--farm-text);
+            background: var(--farm-cream);
+            border: 2px solid var(--farm-brown-lt);
+            border-radius: 10px;
+            padding: 6px 12px;
+            outline: none;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+
+        #chat-input:focus {
+            border-color: var(--farm-green);
+            box-shadow: 0 0 0 3px rgba(93, 170, 62, 0.15);
+        }
+
+        #chat-input::placeholder {
+            color: var(--farm-brown-lt);
+        }
+
+        #chat-send-btn {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: white;
+            background: linear-gradient(180deg, #6BB5D6 0%, #4A9BBF 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 6px 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 0 #357A9A;
+            flex-shrink: 0;
+        }
+
+        #chat-send-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        #chat-send-btn:active { transform: translateY(1px); box-shadow: none; }
+        #chat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .sb-badge {
+            font-size: 0.55rem;
+            color: var(--farm-text-lt);
+        }
+
+        /* --- Preset buttons — Game card style --- */
+        .sb-presets {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .preset-btn {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            border: 2px solid;
+            border-radius: 10px;
+            padding: 6px 12px;
+            cursor: pointer;
+            background: var(--farm-cream);
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .preset-btn:active { transform: scale(0.97); }
+
+        .preset-icon { font-size: 1rem; line-height: 1; }
+
+        .preset-btn-claude { color: #d97706; border-color: #d97706; }
+        .preset-btn-claude:hover { background: rgba(217,119,6,0.08); box-shadow: var(--shadow-warm); transform: translateY(-1px); }
+
+        .preset-btn-codex { color: #10a37f; border-color: #10a37f; }
+        .preset-btn-codex:hover { background: rgba(16,163,127,0.08); box-shadow: var(--shadow-warm); transform: translateY(-1px); }
+
+        .preset-btn-gemini { color: #4285f4; border-color: #4285f4; }
+        .preset-btn-gemini:hover { background: rgba(66,133,244,0.08); box-shadow: var(--shadow-warm); transform: translateY(-1px); }
+
+        .preset-btn-ollama { color: var(--farm-pink); border-color: var(--farm-pink); }
+        .preset-btn-ollama:hover { background: rgba(255,156,170,0.08); box-shadow: var(--shadow-warm); transform: translateY(-1px); }
+
+        /* --- Config rows --- */
+        .sb-cfg-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .sb-cfg-label {
+            font-size: 0.65rem;
+            color: var(--farm-text-lt);
+        }
+
+        .sb-cfg-value {
+            font-size: 0.65rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--farm-brown-dk);
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        /* =====================================================
+           Per-Panel Controls
+           ===================================================== */
+        .panel-kill-btn {
+            margin-left: auto;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--farm-red);
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 0 6px;
+            line-height: 1.4;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .panel-kill-btn:hover {
+            border-color: var(--farm-red);
+            background: rgba(232, 93, 74, 0.1);
+            transform: scale(1.1);
+        }
+
+        .panel-goal.editable {
+            cursor: pointer;
+        }
+
+        .panel-goal.editable:hover {
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            color: var(--farm-brown-dk);
+        }
+
+        .panel-goal-input {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.65rem;
+            color: var(--farm-text);
+            background: var(--farm-cream);
+            border: 2px solid var(--farm-green);
+            border-radius: 6px;
+            padding: 1px 6px;
+            outline: none;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .model-default-tag {
+            color: var(--farm-gold);
+            font-weight: 700;
+        }
+
+        /* =====================================================
+           Farm View — 3D Llama Farm
+           ===================================================== */
+        #farm-view {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #87ceeb;
+        }
+
+        #farm-view canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ============================================
+           Llama King Loading Screen
+           ============================================ */
+        #farm-loading {
+            position: absolute;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at 50% 80%, #2a1a0a 0%, #0a0604 70%);
+            transition: opacity 1.2s ease-out, transform 1.2s ease-out;
+            overflow: hidden;
+        }
+        #farm-loading.farewell {
+            opacity: 0;
+            transform: scale(1.05);
+            pointer-events: none;
+        }
+        #farm-loading.hidden { display: none; }
+
+        /* Stars background */
+        .loading-stars {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+        .loading-star {
+            position: absolute;
+            width: 3px; height: 3px;
+            background: #fff;
+            border-radius: 50%;
+            animation: starTwinkle 2s ease-in-out infinite alternate;
+        }
+        @keyframes starTwinkle {
+            0% { opacity: 0.15; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Ground glow */
+        .loading-ground {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 30%;
+            background: linear-gradient(to top, #1a3a1a 0%, #0d1f0d 40%, transparent 100%);
+        }
+        .loading-ground::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: 10%; right: 10%;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, #4a8a4a, #6fcf6f, #4a8a4a, transparent);
+            filter: blur(3px);
+            animation: groundPulse 3s ease-in-out infinite;
+        }
+        @keyframes groundPulse {
+            0%, 100% { opacity: 0.4; } 50% { opacity: 1; }
+        }
+
+        /* Llama King silhouette */
+        .loading-llama {
+            position: relative;
+            z-index: 2;
+            font-size: 120px;
+            line-height: 1;
+            filter: drop-shadow(0 0 30px rgba(255, 200, 50, 0.5));
+            animation: llamaFloat 4s ease-in-out infinite, llamaAppear 2s ease-out both;
+            margin-bottom: -10px;
+        }
+        @keyframes llamaFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+        }
+        @keyframes llamaAppear {
+            0% { opacity: 0; transform: scale(0.5) translateY(40px); filter: drop-shadow(0 0 0px rgba(255,200,50,0)); }
+            100% { opacity: 1; transform: scale(1) translateY(0); filter: drop-shadow(0 0 30px rgba(255,200,50,0.5)); }
+        }
+
+        /* Crown glow */
+        .loading-crown {
+            position: absolute;
+            top: -18px; left: 25%;
+            transform: translateX(-50%);
+            font-size: 26px;
+            z-index: -1;
+            filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8));
+            animation: crownGlow 2s ease-in-out infinite alternate, crownAppear 2.5s ease-out both;
+        }
+        @keyframes crownGlow {
+            0% { filter: drop-shadow(0 0 10px rgba(255,215,0,0.5)); }
+            100% { filter: drop-shadow(0 0 25px rgba(255,215,0,1)) drop-shadow(0 0 50px rgba(255,180,0,0.4)); }
+        }
+        @keyframes crownAppear {
+            0% { opacity: 0; transform: translateX(-50%) translateY(-25px) scale(0.3); }
+            60% { opacity: 0; }
+            100% { opacity: 1; transform: translateX(-50%) scale(1); }
+        }
+
+        /* Magic ring around llama */
+        .loading-ring {
+            position: absolute;
+            width: 200px; height: 50px;
+            bottom: -20px; left: 50%;
+            transform: translateX(-50%);
+            border: 2px solid rgba(255, 200, 50, 0.3);
+            border-radius: 50%;
+            animation: ringPulse 3s ease-in-out infinite, ringAppear 2s ease-out both;
+            box-shadow: 0 0 20px rgba(255, 200, 50, 0.2), inset 0 0 20px rgba(255, 200, 50, 0.1);
+        }
+        .loading-ring:nth-child(2) { animation-delay: 1s; width: 240px; height: 60px; opacity: 0.5; }
+        @keyframes ringPulse {
+            0%, 100% { transform: translateX(-50%) scaleY(1); opacity: 0.3; }
+            50% { transform: translateX(-50%) scaleY(1.1); opacity: 0.7; }
+        }
+        @keyframes ringAppear {
+            0% { opacity: 0; transform: translateX(-50%) scale(0); }
+            100% { opacity: 1; transform: translateX(-50%) scale(1); }
+        }
+
+        /* Sparkle particles */
+        .loading-sparkle {
+            position: absolute;
+            width: 6px; height: 6px;
+            background: radial-gradient(circle, #ffe580 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: sparkleFloat 3s ease-in-out infinite;
+        }
+        @keyframes sparkleFloat {
+            0% { opacity: 0; transform: translateY(0) scale(0); }
+            20% { opacity: 1; transform: translateY(-20px) scale(1); }
+            80% { opacity: 0.6; transform: translateY(-80px) scale(0.8); }
+            100% { opacity: 0; transform: translateY(-120px) scale(0); }
+        }
+
+        /* Title text */
+        .loading-title {
+            position: relative;
+            z-index: 2;
+            margin-top: 24px;
+            font-family: 'Georgia', serif;
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 20px rgba(255, 200, 0, 0.6), 0 2px 4px rgba(0,0,0,0.8);
+            letter-spacing: 4px;
+            animation: titleAppear 3s ease-out both;
+        }
+        @keyframes titleAppear {
+            0% { opacity: 0; letter-spacing: 20px; }
+            100% { opacity: 1; letter-spacing: 4px; }
+        }
+
+        /* Status text */
+        .loading-status {
+            position: relative;
+            z-index: 2;
+            margin-top: 16px;
+            font-family: 'Georgia', serif;
+            font-size: 14px;
+            color: rgba(255, 220, 150, 0.7);
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+        @keyframes statusPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Loading dots */
+        .loading-dots::after {
+            content: '';
+            animation: dots 2s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+        }
+
+        /* Farm stats — Wooden Sign HUD */
+        #farm-stats {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .farm-stat-card {
+            background: linear-gradient(180deg, rgba(196, 149, 106, 0.92) 0%, rgba(166, 123, 80, 0.92) 100%);
+            border: 2px solid var(--farm-brown-dk);
+            border-radius: 12px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 3px 10px rgba(107, 76, 42, 0.4);
+        }
+
+        .farm-stat-icon {
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+
+        .farm-stat-label {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.6rem;
+            font-weight: 600;
+            color: rgba(74, 55, 40, 0.7);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .farm-stat-value {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--farm-cream);
+            text-shadow: 0 1px 3px rgba(107, 76, 42, 0.5);
+        }
+
+        .farm-stat-value.t-yellow { color: var(--farm-gold); text-shadow: 0 1px 3px rgba(107, 76, 42, 0.5); }
+        .farm-stat-value.t-cyan   { color: #A8E6FF; text-shadow: 0 1px 3px rgba(107, 76, 42, 0.5); }
+
+        #farm-controls {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .farm-ctrl-btn {
+            background: linear-gradient(180deg, var(--farm-green-lt) 0%, var(--farm-green) 100%);
+            border: none;
+            border-radius: 14px;
+            padding: 10px 18px;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.03em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 0 var(--farm-green-dk), 0 6px 16px rgba(93, 170, 62, 0.3);
+        }
+
+        .farm-ctrl-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 var(--farm-green-dk), 0 8px 20px rgba(93, 170, 62, 0.35);
+        }
+
+        .farm-ctrl-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 var(--farm-green-dk);
+        }
+
+        .farm-ctrl-btn.green { color: white; }
+
+        /* Agent spawn buttons — brand colors */
+        .farm-agent-btn {
+            padding: 10px 16px;
+            font-size: 0.75rem;
+        }
+        .farm-agent-btn.claude {
+            background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 4px 0 #b45309, 0 6px 16px rgba(217, 119, 6, 0.35);
+        }
+        .farm-agent-btn.claude:hover {
+            box-shadow: 0 6px 0 #b45309, 0 8px 20px rgba(217, 119, 6, 0.45);
+        }
+        .farm-agent-btn.claude:active {
+            box-shadow: 0 1px 0 #b45309;
+        }
+        .farm-agent-btn.codex {
+            background: linear-gradient(180deg, #2ec49a 0%, #10a37f 100%);
+            box-shadow: 0 4px 0 #0a7a5e, 0 6px 16px rgba(16, 163, 127, 0.35);
+        }
+        .farm-agent-btn.codex:hover {
+            box-shadow: 0 6px 0 #0a7a5e, 0 8px 20px rgba(16, 163, 127, 0.45);
+        }
+        .farm-agent-btn.codex:active {
+            box-shadow: 0 1px 0 #0a7a5e;
+        }
+        .farm-agent-btn.gemini {
+            background: linear-gradient(180deg, #5b9ef4 0%, #4285f4 100%);
+            box-shadow: 0 4px 0 #2a6ad4, 0 6px 16px rgba(66, 133, 244, 0.35);
+        }
+        .farm-agent-btn.gemini:hover {
+            box-shadow: 0 6px 0 #2a6ad4, 0 8px 20px rgba(66, 133, 244, 0.45);
+        }
+        .farm-agent-btn.gemini:active {
+            box-shadow: 0 1px 0 #2a6ad4;
+        }
+        .farm-ctrl-btn.red {
+            color: white;
+            background: linear-gradient(180deg, #ff6b5a 0%, var(--farm-red) 100%);
+            box-shadow: 0 4px 0 #b8382a, 0 6px 16px rgba(232, 93, 74, 0.3);
+        }
+        .farm-ctrl-btn.red:hover {
+            box-shadow: 0 6px 0 #b8382a, 0 8px 20px rgba(232, 93, 74, 0.4);
+        }
+        .farm-ctrl-btn.red:active {
+            box-shadow: 0 1px 0 #b8382a;
+        }
+
+        @keyframes killFlash {
+            0%   { box-shadow: 0 0 0 0 rgba(232, 93, 74, 0.7); }
+            50%  { box-shadow: 0 0 20px 8px rgba(232, 93, 74, 0.3); }
+            100% { box-shadow: 0 4px 0 #b8382a, 0 6px 16px rgba(232, 93, 74, 0.3); }
+        }
+        .farm-ctrl-btn.red.flash {
+            animation: killFlash 0.4s ease-out;
+        }
 
         /* =====================================================
            Utility
            ===================================================== */
         .hidden { display: none !important; }
+
+        /* (chat styles are in the existing #orch-chat section above) */
     </style>
 </head>
 <body>
@@ -367,34 +1474,249 @@
 
         <!-- ====== Header ====== -->
         <header>
+            <img src="/swarm/logo.png" alt="Clawllama" class="header-logo" />
+            <h1>Llama Farm</h1>
             <div id="status-dot" class="disconnected"></div>
-            <h1>Clawllama Swarm Control</h1>
             <span id="status-text">Disconnected</span>
 
             <div class="header-spacer"></div>
 
-            <div class="header-stat">
-                <span class="label">Workers</span>
-                <span class="value" id="worker-count">0</span>
-            </div>
-
-            <div class="header-stat">
-                <span class="label">Tick</span>
-                <span class="value" id="tick-counter">0</span>
-            </div>
+            <button id="sidebar-toggle">CONSOLE</button>
+            <button id="settings-toggle" title="Settings panel">&#x2699;</button>
         </header>
 
-        <!-- ====== Terminal Grid ====== -->
-        <div id="terminal-grid"></div>
+        <!-- ====== Content Body: Top row + Console panel ====== -->
+        <div id="content-body">
 
-        <!-- ====== Event Log ====== -->
-        <div id="event-log" role="log" aria-live="polite" aria-label="Event log"></div>
+                <!-- ====== Unified Sidebar (right column of L) ====== -->
+                <div id="sidebar" class="collapsed">
+                    <div class="sb-scroll">
+
+                        <!-- ── CONTROLS ── -->
+                        <div class="sb-divider t-cyan">Controls</div>
+
+                        <!-- Model Section -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-cyan">
+                                Ollama Model
+                                <span class="sb-badge" id="model-count"></span>
+                            </div>
+                            <div class="sb-row">
+                                <select id="model-select" class="sb-select">
+                                    <option value="">Loading models...</option>
+                                </select>
+                                <button id="model-refresh-btn" class="sb-btn sb-btn-cyan sb-btn-sm" title="Refresh models">&#x21bb;</button>
+                            </div>
+                            <div class="sb-status" id="model-status"></div>
+                        </div>
+
+                        <!-- Spawn Section -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-green">Spawn Llama</div>
+                            <div class="sb-row">
+                                <input id="spawn-goal" class="sb-input" type="text"
+                                       placeholder="Goal (optional)" />
+                            </div>
+                            <div class="sb-row">
+                                <button id="spawn-btn" class="sb-btn sb-btn-green">Spawn</button>
+                            </div>
+                            <div class="sb-status" id="spawn-status"></div>
+                        </div>
+
+                        <!-- Kill Switch Section -->
+                        <div class="sb-section">
+                            <div class="sb-section-title" style="color: var(--farm-red);">Kill Switch</div>
+                            <div class="sb-row">
+                                <button id="kill-all-btn" class="sb-btn" style="background: var(--farm-red); color: white; border-color: #b8382a; width: 100%;">&#x26A0; Kill All Agents</button>
+                            </div>
+                            <div class="sb-status" id="kill-all-status"></div>
+                        </div>
+
+                        <!-- Mission Section -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-yellow">Mission Directive</div>
+                            <div class="sb-row">
+                                <input id="mission-input" class="sb-input" type="text"
+                                       placeholder="Set the King's mission" />
+                            </div>
+                            <div class="sb-row">
+                                <button id="mission-btn" class="sb-btn sb-btn-yellow">Set Mission</button>
+                            </div>
+                            <div class="sb-status" id="mission-status"></div>
+                        </div>
+
+                        <!-- Presets Section -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-cyan">Quick Launch</div>
+                            <div class="sb-presets">
+                                <button class="preset-btn preset-btn-claude" id="preset-claude"
+                                        title="Launch a Claude llama">
+                                    <span class="preset-icon">&#x2726;</span> Claude
+                                </button>
+                                <button class="preset-btn preset-btn-codex" id="preset-codex"
+                                        title="Launch a Codex llama">
+                                    <span class="preset-icon">&#x25C6;</span> Codex
+                                </button>
+                                <button class="preset-btn preset-btn-gemini" id="preset-gemini"
+                                        title="Launch a Gemini llama">
+                                    <span class="preset-icon">&#x2733;</span> Gemini
+                                </button>
+                                <button class="preset-btn preset-btn-ollama" id="preset-ollama"
+                                        title="Launch an Ollama llama">
+                                    <span class="preset-icon">&#x1F999;</span> Ollama
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- ── ADMIN ── -->
+                        <div class="sb-divider t-magenta">Admin</div>
+
+                        <!-- Default Model -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-magenta">Default Llama Model</div>
+                            <div class="sb-row">
+                                <select id="admin-model-select" class="sb-select"></select>
+                            </div>
+                            <div class="sb-row">
+                                <button id="admin-set-default" class="sb-btn sb-btn-magenta">Set as Default</button>
+                            </div>
+                            <div class="sb-status" id="admin-model-status"></div>
+                        </div>
+
+                        <!-- Swarm Config -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-magenta">Swarm Config</div>
+                            <div class="sb-cfg-row">
+                                <span class="sb-cfg-label">Worker Model</span>
+                                <span class="sb-cfg-value" id="admin-current-model">--</span>
+                            </div>
+                            <div class="sb-cfg-row">
+                                <span class="sb-cfg-label">Orch. Model</span>
+                                <span class="sb-cfg-value" id="admin-orch-model">--</span>
+                            </div>
+                            <div class="sb-cfg-row">
+                                <span class="sb-cfg-label">Max Workers</span>
+                                <span class="sb-cfg-value" id="admin-max-workers">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Help -->
+                        <div class="sb-section">
+                            <div class="sb-section-title t-cyan">Quick Reference</div>
+                            <div class="sb-status" style="line-height:1.6; white-space:normal;">
+                                Spawn llamas, set missions, quick-launch presets.
+                                Click llama goal text to edit inline. X to kill.
+                            </div>
+                        </div>
+
+                    </div><!-- /.sb-scroll -->
+                </div><!-- /#sidebar -->
+
+            <!-- ====== Left Column (farm + console = L shape) ====== -->
+            <div id="content-left">
+
+                <!-- ====== Main Area ====== -->
+                <div id="main-area">
+                    <!-- ====== Farm View (3D — default) ====== -->
+                    <div id="farm-view">
+                        <!-- Llama King Loading Screen -->
+                        <div id="farm-loading">
+                            <div class="loading-stars" id="loading-stars"></div>
+                            <div class="loading-ground"></div>
+                            <div class="loading-llama">
+                                <div class="loading-crown">&#x1F451;</div>
+                                &#x1F999;
+                                <div class="loading-ring"></div>
+                                <div class="loading-ring"></div>
+                            </div>
+                            <div class="loading-title">LLAMA FARM</div>
+                            <div class="loading-status"><span class="loading-dots">Summoning the herd</span></div>
+                        </div>
+                        <!-- HUD stats -->
+                        <div id="farm-stats">
+                            <div class="farm-stat-card">
+                                <span class="farm-stat-icon">&#x1F999;</span>
+                                <div>
+                                    <div class="farm-stat-label">Llamas</div>
+                                    <div class="farm-stat-value" id="farm-llama-count">0</div>
+                                </div>
+                            </div>
+                            <div class="farm-stat-card">
+                                <span class="farm-stat-icon">&#x1F4AD;</span>
+                                <div>
+                                    <div class="farm-stat-label">Thinking</div>
+                                    <div class="farm-stat-value t-yellow" id="farm-thinking-count">0</div>
+                                </div>
+                            </div>
+                            <div class="farm-stat-card">
+                                <span class="farm-stat-icon">&#x26A1;</span>
+                                <div>
+                                    <div class="farm-stat-label">Tick</div>
+                                    <div class="farm-stat-value t-cyan" id="farm-tick-count">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick actions -->
+                        <div id="farm-controls">
+                            <button class="farm-ctrl-btn farm-agent-btn claude" id="farm-spawn-claude"
+                                    title="Spawn a Claude llama">
+                                <span>&#x2726;</span> Claude
+                            </button>
+                            <button class="farm-ctrl-btn farm-agent-btn codex" id="farm-spawn-codex"
+                                    title="Spawn a Codex llama">
+                                <span>&#x25C6;</span> Codex
+                            </button>
+                            <button class="farm-ctrl-btn farm-agent-btn gemini" id="farm-spawn-gemini"
+                                    title="Spawn a Gemini llama">
+                                <span>&#x2733;</span> Gemini
+                            </button>
+                            <button class="farm-ctrl-btn red" id="farm-kill-all-btn"
+                                    title="Kill all llamas and reset the King">
+                                <span>&#x26A0;</span> Kill All
+                            </button>
+                        </div>
+
+                        <!-- Agent Chat Panel -->
+                        <div id="orch-chat">
+                            <div id="chat-header">
+                                <span id="chat-header-icon">&#x1F999;</span>
+                                <span id="chat-header-title">Llama King</span>
+                                <span id="chat-header-badge">king</span>
+                                <span id="chat-header-toggle">&#x25BC;</span>
+                            </div>
+                            <div id="chat-messages">
+                                <div class="chat-msg system" style="text-align:center; align-self:center; font-size:0.65rem; opacity:0.6;">
+                                    Click a llama to chat with it
+                                </div>
+                            </div>
+                            <div id="chat-input-row">
+                                <input id="chat-input" type="text"
+                                       placeholder="Message the Llama King..." autocomplete="off" />
+                                <button id="chat-send-btn">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====== Console Panel (bottom of left column) ====== -->
+                <div id="console-panel" class="collapsed">
+                    <div id="console-resize-handle"></div>
+                    <div id="console-content">
+                        <div id="terminal-grid"></div>
+                        <div id="event-log" role="log" aria-live="polite" aria-label="Event log"></div>
+                    </div>
+                </div>
+
+            </div><!-- /#content-left -->
+
+        </div><!-- /#content-body -->
 
     </div><!-- /#app -->
 
     <!-- xterm.js -->
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.5.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.10.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 
     <!-- Optional visual layers — loaded independently; page works without them -->
     <script>
@@ -412,6 +1734,10 @@
         }());
     </script>
 
+    <!-- Three.js + Llama Farm 3D renderer -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="/swarm/llama-farm.js"></script>
+
     <script>
         'use strict';
 
@@ -426,6 +1752,10 @@
            ============================================================ */
         const agents = {};   // agentId -> { panel, term, fitAddon, state }
         let tickCounter = 0;
+        let swarmWs = null;  // WebSocket ref for sending commands
+        let _defaultModel = '';  // swarm's configured worker model
+        let _llamaFarm = null;   // LlamaFarm 3D renderer instance
+        let _isFarmView = true;  // true = farm view (default), false = terminal view
 
         /* ============================================================
            DOM References
@@ -434,26 +1764,24 @@
         const eventLog    = document.getElementById('event-log');
         const statusDot   = document.getElementById('status-dot');
         const statusText  = document.getElementById('status-text');
-        const workerCount = document.getElementById('worker-count');
-        const tickEl      = document.getElementById('tick-counter');
 
         /* ============================================================
            xterm.js theme
            ============================================================ */
         const XTERM_THEME = {
-            background:  '#12121a',
-            foreground:  '#c0ffe0',
-            cursor:      '#00fff5',
-            cursorAccent:'#0a0a0f',
-            black:       '#1a1a2a',
-            red:         '#ff0033',
-            green:       '#39ff14',
-            yellow:      '#ffe600',
-            blue:        '#007eff',
-            magenta:     '#ff00ff',
-            cyan:        '#00fff5',
-            white:       '#e0e0e0',
-            brightBlack: '#333355',
+            background:  '#3D2B1F',
+            foreground:  '#F5E6C8',
+            cursor:      '#FFD700',
+            cursorAccent:'#3D2B1F',
+            black:       '#2A1F15',
+            red:         '#E85D4A',
+            green:       '#7EC850',
+            yellow:      '#FFD700',
+            blue:        '#6BB5D6',
+            magenta:     '#FF9CAA',
+            cyan:        '#87CEEB',
+            white:       '#FFF8E7',
+            brightBlack: '#6B5B4A',
         };
 
         /* ============================================================
@@ -482,7 +1810,7 @@
 
             const agentIdEl = document.createElement('span');
             agentIdEl.className = 'panel-agent-id';
-            agentIdEl.textContent = agentId;
+            agentIdEl.textContent = displayName(agentId);
 
             const spinner = document.createElement('div');
             spinner.className = 'thinking-spinner';
@@ -490,16 +1818,69 @@
 
             const badge = document.createElement('span');
             badge.className = 'status-badge ' + (isOrchestrator ? 'badge-orchestrator' : 'badge-idle');
-            badge.textContent = isOrchestrator ? 'orchestrator' : 'idle';
+            badge.textContent = isOrchestrator ? 'king' : 'idle';
+
+            const modelBadge = document.createElement('span');
+            modelBadge.className = 'panel-model-badge';
+            modelBadge.textContent = '';
 
             const goalEl = document.createElement('span');
-            goalEl.className = 'panel-goal';
+            goalEl.className = 'panel-goal' + (isOrchestrator ? '' : ' editable');
             goalEl.textContent = '';
 
             panelHeader.appendChild(agentIdEl);
             panelHeader.appendChild(spinner);
             panelHeader.appendChild(badge);
+            panelHeader.appendChild(modelBadge);
             panelHeader.appendChild(goalEl);
+
+            /* ---- Per-panel controls (workers only) ---- */
+            if (!isOrchestrator) {
+                /* Kill button */
+                var killBtn = document.createElement('button');
+                killBtn.className = 'panel-kill-btn';
+                killBtn.textContent = 'X';
+                killBtn.title = 'Kill llama';
+                killBtn.addEventListener('click', function () {
+                    sendCommand({ command: 'kill', worker_id: agentId });
+                });
+                panelHeader.appendChild(killBtn);
+
+                /* Click-to-edit goal */
+                goalEl.addEventListener('click', function () {
+                    if (goalEl.querySelector('input')) return; // already editing
+                    var current = goalEl.textContent || '';
+                    var input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'panel-goal-input';
+                    input.value = current;
+                    goalEl.textContent = '';
+                    goalEl.appendChild(input);
+                    input.focus();
+
+                    function commitEdit() {
+                        var newGoal = input.value.trim();
+                        if (input.parentNode) {
+                            goalEl.removeChild(input);
+                        }
+                        goalEl.textContent = newGoal || current;
+                        if (newGoal && newGoal !== current) {
+                            sendCommand({ command: 'assign_goal', worker_id: agentId, goal: newGoal });
+                        }
+                    }
+
+                    input.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter') {
+                            commitEdit();
+                        } else if (e.key === 'Escape') {
+                            if (input.parentNode) goalEl.removeChild(input);
+                            goalEl.textContent = current;
+                        }
+                    });
+
+                    input.addEventListener('blur', commitEdit);
+                });
+            }
 
             /* ---- Terminal wrapper ---- */
             const wrapper = document.createElement('div');
@@ -539,6 +1920,7 @@
                 panel,
                 panelHeader,
                 badge,
+                modelBadge,
                 goalEl,
                 term,
                 fitAddon,
@@ -606,7 +1988,7 @@
          * @returns {{cls: string, label: string}}
          */
         function statusToBadge(status, isOrchestrator) {
-            if (isOrchestrator) return { cls: 'badge-orchestrator', label: 'orchestrator' };
+            if (isOrchestrator) return { cls: 'badge-orchestrator', label: 'king' };
             switch ((status || '').toLowerCase()) {
                 case 'acting':   return { cls: 'badge-acting',   label: 'acting' };
                 case 'thinking': return { cls: 'badge-thinking', label: 'thinking' };
@@ -624,7 +2006,7 @@
             const entry = agents[agentId];
             if (!entry) return;
 
-            const { panel, badge, goalEl, term, fitAddon, isOrchestrator } = entry;
+            const { panel, badge, modelBadge, goalEl, term, fitAddon, isOrchestrator } = entry;
             const status    = data.status || 'idle';
             const stateClass = statusToStateClass(status, isOrchestrator);
             const badgeInfo  = statusToBadge(status, isOrchestrator);
@@ -638,8 +2020,15 @@
             badge.className = 'status-badge ' + badgeInfo.cls;
             badge.textContent = badgeInfo.label;
 
-            /* Goal */
-            goalEl.textContent = data.goal || '';
+            /* Model badge */
+            if (data.model) {
+                modelBadge.textContent = data.model;
+            }
+
+            /* Goal — skip update if user is editing inline */
+            if (!goalEl.querySelector('input')) {
+                goalEl.textContent = data.goal || '';
+            }
 
             /* Terminal content */
             if (data.screen_text != null) {
@@ -700,7 +2089,6 @@
             const workers = Object.keys(agents).filter(function (id) {
                 return !agents[id].isOrchestrator;
             });
-            workerCount.textContent = String(workers.length);
         }
 
         /* ============================================================
@@ -754,15 +2142,23 @@
          */
         function handleSwarmState(message) {
             const agentSnapshots = message.agents || {};
+            const snapshotKeys = Object.keys(agentSnapshots);
+            console.log('[Swarm] handleSwarmState: agents=', snapshotKeys, 'farm ready:', !!_llamaFarm, 'existing panels:', Object.keys(agents));
 
             /* Create / update existing agents */
-            Object.keys(agentSnapshots).forEach(function (agentId) {
+            snapshotKeys.forEach(function (agentId) {
                 const snap          = agentSnapshots[agentId];
                 const isOrchestrator = (agentId === 'orchestrator');
                 const isNew          = !agents[agentId];
 
                 if (isNew) {
+                    console.log('[Swarm] NEW agent:', agentId, 'isOrch:', isOrchestrator, 'status:', snap.status);
                     createAgentPanel(agentId, isOrchestrator);
+
+                    /* Dismiss loading screen when orchestrator first appears */
+                    if (isOrchestrator && typeof dismissLoadingScreen === 'function') {
+                        setTimeout(dismissLoadingScreen, 800);
+                    }
 
                     /* Add particle flow line from orchestrator to new worker */
                     if (!isOrchestrator && window.particleSystem) {
@@ -770,23 +2166,64 @@
                             'panel-orchestrator', 'panel-' + agentId, '#00fff5'
                         );
                     }
+
+                    /* Add llama to 3D farm */
+                    if (_llamaFarm) {
+                        try {
+                            _llamaFarm.addLlama(agentId, isOrchestrator);
+                            console.log('[Swarm] Llama added inline:', agentId);
+                            addEventLog('Llama added: ' + displayName(agentId));
+                        } catch (e) {
+                            console.error('[Swarm] Llama add FAILED:', agentId, e);
+                            addEventLog('Llama add FAILED: ' + displayName(agentId) + ' — ' + e.message);
+                        }
+                    } else {
+                        console.warn('[Swarm] Farm not ready for:', agentId, '(will backfill on initFarm)');
+                        addEventLog('Farm not ready for: ' + agentId + ' (will backfill)');
+                    }
                 }
 
                 updateAgentState(agentId, snap);
+
+                /* Sync llama farm state */
+                if (_llamaFarm) {
+                    _llamaFarm.updateLlama(agentId, {
+                        status: snap.status || 'idle',
+                        goal: snap.goal || '',
+                        iteration: snap.iteration || 0,
+                        lastAction: snap.last_action || null,
+                    });
+                }
             });
 
             /* Remove panels for agents no longer in the snapshot */
             Object.keys(agents).forEach(function (agentId) {
                 if (!agentSnapshots[agentId]) {
                     removeAgentPanel(agentId);
+
+                    /* Remove llama from 3D farm */
+                    if (_llamaFarm) {
+                        _llamaFarm.removeLlama(agentId);
+                    }
                 }
             });
 
-            /* Bump tick counter */
-            tickCounter += 1;
-            tickEl.textContent = String(tickCounter);
+            /* Use server tick if available, else increment locally */
+            tickCounter = message.tick || (tickCounter + 1);
 
             updateWorkerCount();
+
+            /* Update farm HUD stats */
+            var workerList = Object.keys(agentSnapshots).filter(function (id) { return id !== 'orchestrator'; });
+            var thinkingCount = workerList.filter(function (id) {
+                return (agentSnapshots[id].status || '') === 'thinking';
+            }).length;
+            var llamaCountEl = document.getElementById('farm-llama-count');
+            var thinkingCountEl = document.getElementById('farm-thinking-count');
+            var farmTickEl = document.getElementById('farm-tick-count');
+            if (llamaCountEl) llamaCountEl.textContent = String(workerList.length);
+            if (thinkingCountEl) thinkingCountEl.textContent = String(thinkingCount);
+            if (farmTickEl) farmTickEl.textContent = String(tickCounter);
         }
 
         /* ============================================================
@@ -821,7 +2258,7 @@
             const agentId = message.agent_id || 'unknown';
             const detail  = message.detail  || '';
 
-            const logText = event + ' | agent=' + agentId + (detail ? ' | ' + detail : '');
+            const logText = event + ' | ' + displayName(agentId) + (detail ? ' | ' + detail : '');
             addEventLog(logText);
 
             /* Visual feedback for specific events */
@@ -847,12 +2284,16 @@
             }
 
             ws.onopen = function () {
+                swarmWs = ws;
                 statusDot.className = 'connected';
                 statusText.textContent = 'Connected';
                 addEventLog('WebSocket connected to ' + url);
+                // Request swarm config to get default model
+                sendCommand({ command: 'get_config' });
             };
 
             ws.onclose = function () {
+                swarmWs = null;
                 statusDot.className = 'disconnected';
                 statusText.textContent = 'Disconnected';
                 addEventLog('WebSocket disconnected — reconnecting...');
@@ -871,6 +2312,8 @@
                     return; // ignore malformed messages
                 }
 
+                console.log('[WS]', message.type, message.type === 'swarm_state' ? 'agents=' + Object.keys(message.agents || {}).length + ' tick=' + message.tick : '');
+
                 switch (message.type) {
                     case 'swarm_state':
                         handleSwarmState(message);
@@ -880,6 +2323,29 @@
                         break;
                     case 'screen':
                         handleScreen(message);
+                        break;
+                    case 'config':
+                        _defaultModel = message.worker_model || '';
+                        selectModelInDropdown(_defaultModel);
+                        markDefaultInDropdown(modelSelect, _defaultModel);
+                        updateAdminConfig(
+                            message.worker_model,
+                            message.orchestrator_model,
+                            message.max_workers
+                        );
+                        addEventLog('Config: worker_model=' + _defaultModel);
+                        break;
+                    case 'ack':
+                        addEventLog('ACK: ' + (message.command || '') + (message.worker_id ? ' [' + displayName(message.worker_id) + ']' : ''));
+                        if (message.command === 'send_message' && message.agent_id === 'orchestrator') {
+                            addChatMessage('Message delivered', 'system');
+                        }
+                        break;
+                    case 'error':
+                        addEventLog('ERR: ' + (message.command || '') + ' — ' + (message.message || 'unknown'));
+                        if (message.command === 'send_message') {
+                            addChatMessage('Error: ' + (message.message || 'unknown'), 'system');
+                        }
                         break;
                     default:
                         /* Unknown message type — ignore */
@@ -904,10 +2370,743 @@
         });
 
         /* ============================================================
+           Command Sender
+           ============================================================ */
+
+        /**
+         * Send a command object via WebSocket.
+         * @param {object} cmd
+         */
+        function sendCommand(cmd) {
+            if (!swarmWs || swarmWs.readyState !== WebSocket.OPEN) {
+                addEventLog('Cannot send command — not connected');
+                return;
+            }
+            swarmWs.send(JSON.stringify(cmd));
+        }
+
+        /* ============================================================
+           Control Panel — DOM refs
+           ============================================================ */
+
+        const modelSelect    = document.getElementById('model-select');
+        const modelCount     = document.getElementById('model-count');
+        const modelStatus    = document.getElementById('model-status');
+        const modelRefresh   = document.getElementById('model-refresh-btn');
+        const spawnGoal      = document.getElementById('spawn-goal');
+        const spawnBtn       = document.getElementById('spawn-btn');
+        const spawnStatus    = document.getElementById('spawn-status');
+        const missionInput   = document.getElementById('mission-input');
+        const missionBtn     = document.getElementById('mission-btn');
+        const missionStatus  = document.getElementById('mission-status');
+        const sidebar        = document.getElementById('sidebar');
+        const sidebarToggle  = document.getElementById('sidebar-toggle');
+
+        /* ============================================================
+           Status flash helper
+           ============================================================ */
+
+        /**
+         * Briefly show a status message, then clear it.
+         * @param {HTMLElement} el  - status element
+         * @param {string} text
+         * @param {'ok'|'err'|''} cls
+         * @param {number} ms
+         */
+        function flashStatus(el, text, cls, ms) {
+            el.textContent = text;
+            el.className = 'sb-status' + (cls ? ' ' + cls : '');
+            if (ms) {
+                setTimeout(function () {
+                    el.textContent = '';
+                    el.className = 'sb-status';
+                }, ms);
+            }
+        }
+
+        /* ============================================================
+           Model Loader
+           ============================================================ */
+
+        /** Replace all options in a <select> with a single placeholder. */
+        function setSelectPlaceholder(selectEl, text) {
+            while (selectEl.firstChild) selectEl.removeChild(selectEl.firstChild);
+            var opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = text;
+            selectEl.appendChild(opt);
+        }
+
+        /** Select a model in the dropdown by value. */
+        function selectModelInDropdown(modelName) {
+            if (!modelName) return;
+            for (var i = 0; i < modelSelect.options.length; i++) {
+                if (modelSelect.options[i].value === modelName) {
+                    modelSelect.selectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        function loadModels() {
+            modelRefresh.classList.add('loading');
+            flashStatus(modelStatus, 'Fetching models...', '', 0);
+
+            fetch('/api/swarm/models')
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (data) {
+                    var models = data.models || [];
+                    while (modelSelect.firstChild) modelSelect.removeChild(modelSelect.firstChild);
+
+                    if (models.length === 0) {
+                        setSelectPlaceholder(modelSelect, '-- no Ollama models pulled --');
+                        modelCount.textContent = '(0)';
+                        flashStatus(modelStatus, 'No models found. Run: ollama pull <model>', 'err', 0);
+                        return;
+                    }
+
+                    models.forEach(function (m) {
+                        var opt = document.createElement('option');
+                        opt.value = m.name;
+                        var label = m.name;
+                        if (m.parameter_size) label += '  [' + m.parameter_size + ']';
+                        if (m.family) label += '  ' + m.family;
+                        opt.textContent = label;
+                        modelSelect.appendChild(opt);
+                    });
+
+                    modelCount.textContent = '(' + models.length + ')';
+
+                    // Auto-select the swarm's configured model and mark it
+                    if (_defaultModel) {
+                        selectModelInDropdown(_defaultModel);
+                        markDefaultInDropdown(modelSelect, _defaultModel);
+                    }
+
+                    flashStatus(modelStatus, models.length + ' models loaded', 'ok', 3000);
+                    syncAdminModels();
+                })
+                .catch(function (err) {
+                    setSelectPlaceholder(modelSelect, '-- failed to load models --');
+                    modelCount.textContent = '';
+                    flashStatus(modelStatus, 'Error: ' + err.message + ' (server may need restart)', 'err', 0);
+                })
+                .finally(function () {
+                    modelRefresh.classList.remove('loading');
+                });
+        }
+
+        /* ============================================================
+           Control Panel — Event Listeners
+           ============================================================ */
+
+        /* Toggle console panel (bottom terminal drawer) */
+        var consolePanel = document.getElementById('console-panel');
+        sidebarToggle.addEventListener('click', function () {
+            consolePanel.classList.toggle('collapsed');
+            sidebarToggle.classList.toggle('active');
+            /* Refit terminals + farm after animation */
+            setTimeout(function () {
+                Object.keys(agents).forEach(function (agentId) {
+                    try { agents[agentId].fitAddon.fit(); } catch (_) { /* ignore */ }
+                });
+                if (_llamaFarm) _llamaFarm.resize();
+            }, 320);
+        });
+
+        /* Console panel resize drag */
+        (function () {
+            var handle = document.getElementById('console-resize-handle');
+            var dragging = false;
+            var startY, startH;
+            handle.addEventListener('mousedown', function (e) {
+                dragging = true;
+                startY = e.clientY;
+                startH = consolePanel.offsetHeight;
+                document.body.style.cursor = 'ns-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', function (e) {
+                if (!dragging) return;
+                var delta = startY - e.clientY;
+                var newH = Math.max(120, Math.min(window.innerHeight * 0.6, startH + delta));
+                consolePanel.style.height = newH + 'px';
+            });
+            document.addEventListener('mouseup', function () {
+                if (!dragging) return;
+                dragging = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                /* Refit terminals + farm after resize */
+                Object.keys(agents).forEach(function (agentId) {
+                    try { agents[agentId].fitAddon.fit(); } catch (_) { /* ignore */ }
+                });
+                if (_llamaFarm) _llamaFarm.resize();
+            });
+        }());
+
+        /* Toggle sidebar settings panel */
+        var settingsToggle = document.getElementById('settings-toggle');
+        settingsToggle.addEventListener('click', function () {
+            sidebar.classList.toggle('collapsed');
+            settingsToggle.classList.toggle('active');
+            /* Resize farm after sidebar animation */
+            setTimeout(function () {
+                if (_llamaFarm) _llamaFarm.resize();
+            }, 360);
+        });
+
+        /* Refresh models */
+        modelRefresh.addEventListener('click', function () {
+            loadModels();
+        });
+
+        /* Spawn worker */
+        spawnBtn.addEventListener('click', function () {
+            var goal  = spawnGoal.value.trim();
+            var model = modelSelect.value;
+            if (!model) {
+                flashStatus(spawnStatus, 'Select a model first', 'err', 3000);
+                return;
+            }
+            spawnBtn.disabled = true;
+            flashStatus(spawnStatus, 'Spawning llama...', '', 0);
+            sendCommand({ command: 'spawn', goal: goal, model: model });
+            spawnGoal.value = '';
+            setTimeout(function () {
+                spawnBtn.disabled = false;
+                flashStatus(spawnStatus, '', '', 0);
+            }, 1000);
+        });
+
+        spawnGoal.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') spawnBtn.click();
+        });
+
+        /* Set mission */
+        missionBtn.addEventListener('click', function () {
+            var goal = missionInput.value.trim();
+            if (!goal) {
+                flashStatus(missionStatus, 'Enter a mission directive', 'err', 3000);
+                return;
+            }
+            missionBtn.disabled = true;
+            flashStatus(missionStatus, 'Setting mission...', '', 0);
+            sendCommand({ command: 'set_orchestrator_goal', goal: goal });
+            missionInput.value = '';
+            setTimeout(function () {
+                missionBtn.disabled = false;
+                flashStatus(missionStatus, 'Mission sent', 'ok', 2000);
+            }, 500);
+        });
+
+        missionInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') missionBtn.click();
+        });
+
+        /* Model change → update default worker model */
+        modelSelect.addEventListener('change', function () {
+            var model = modelSelect.value;
+            if (model) {
+                sendCommand({ command: 'set_worker_model', model: model });
+                flashStatus(modelStatus, 'Default model: ' + model, 'ok', 3000);
+            }
+        });
+
+        /* ============================================================
+           Presets
+           ============================================================ */
+
+        var PRESETS = {
+            claude: {
+                shell_cmd: 'claude',
+                goal: 'Claude session',
+                label: 'Claude',
+                model: 'claude-cli',
+            },
+            codex: {
+                shell_cmd: 'codex',
+                goal: 'Codex session',
+                label: 'Codex',
+                model: 'codex-cli',
+            },
+            gemini: {
+                shell_cmd: 'gemini',
+                goal: 'Gemini session',
+                label: 'Gemini',
+                model: 'gemini-cli',
+            },
+            ollama: {
+                shell_cmd: null, // built dynamically with selected model
+                goal: 'Ollama session',
+                label: 'Ollama',
+            },
+        };
+
+        function launchPreset(presetKey) {
+            var preset = PRESETS[presetKey];
+            if (!preset) return;
+
+            var cmd = {
+                command: 'spawn',
+                goal: preset.goal,
+            };
+
+            if (presetKey === 'ollama') {
+                // Launch our own agent with the selected model
+                var model = modelSelect.value;
+                if (!model) {
+                    flashStatus(spawnStatus, 'Select a model first for Ollama', 'err', 3000);
+                    return;
+                }
+                cmd.model = model;
+                cmd.shell_cmd = 'python agent.py --model ' + model + ' --no-web';
+                cmd.goal = 'Ollama (' + model + ')';
+            } else {
+                // CLI agent preset (claude, codex, gemini)
+                cmd.model = preset.model || presetKey + '-cli';
+                cmd.shell_cmd = preset.shell_cmd;
+            }
+
+            sendCommand(cmd);
+            flashStatus(spawnStatus, 'Launching ' + preset.label + '...', 'ok', 3000);
+            addEventLog('Preset: ' + preset.label + ' → ' + (cmd.shell_cmd || ''));
+        }
+
+        document.getElementById('preset-claude').addEventListener('click', function () {
+            launchPreset('claude');
+        });
+
+        document.getElementById('preset-codex').addEventListener('click', function () {
+            launchPreset('codex');
+        });
+
+        document.getElementById('preset-gemini').addEventListener('click', function () {
+            launchPreset('gemini');
+        });
+
+        document.getElementById('preset-ollama').addEventListener('click', function () {
+            launchPreset('ollama');
+        });
+
+        /* ============================================================
+           Admin Sidebar
+           ============================================================ */
+
+        var adminModelSelect = document.getElementById('admin-model-select');
+        var adminSetDefault  = document.getElementById('admin-set-default');
+        var adminModelStatus = document.getElementById('admin-model-status');
+        var adminCurrentModel = document.getElementById('admin-current-model');
+        var adminOrchModel   = document.getElementById('admin-orch-model');
+        var adminMaxWorkers  = document.getElementById('admin-max-workers');
+
+        /** Sync admin model dropdown with the main one. */
+        function syncAdminModels() {
+            while (adminModelSelect.firstChild) adminModelSelect.removeChild(adminModelSelect.firstChild);
+            for (var i = 0; i < modelSelect.options.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = modelSelect.options[i].value;
+                var label = modelSelect.options[i].value;
+                if (opt.value === _defaultModel) {
+                    label += '  [DEFAULT]';
+                }
+                opt.textContent = label;
+                adminModelSelect.appendChild(opt);
+            }
+            // Pre-select current default
+            selectInDropdown(adminModelSelect, _defaultModel);
+        }
+
+        function selectInDropdown(selectEl, value) {
+            if (!value) return;
+            for (var i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].value === value) {
+                    selectEl.selectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        /* Set as default */
+        adminSetDefault.addEventListener('click', function () {
+            var model = adminModelSelect.value;
+            if (!model) return;
+            _defaultModel = model;
+            sendCommand({ command: 'set_worker_model', model: model });
+            // Update main dropdown to match
+            selectModelInDropdown(model);
+            // Re-label options in both dropdowns
+            markDefaultInDropdown(modelSelect, _defaultModel);
+            syncAdminModels();
+            // Update config display
+            adminCurrentModel.textContent = model;
+            flashStatus(adminModelStatus, 'Default model set: ' + model, 'ok', 3000);
+            addEventLog('Admin: default model changed to ' + model);
+        });
+
+        /** Mark the default model with a tag in the main dropdown. */
+        function markDefaultInDropdown(selectEl, defaultModel) {
+            for (var i = 0; i < selectEl.options.length; i++) {
+                var opt = selectEl.options[i];
+                // Strip any existing default marker
+                var cleanLabel = opt.textContent.replace(/\s*\u2605\s*DEFAULT$/, '');
+                if (opt.value === defaultModel) {
+                    opt.textContent = cleanLabel + '  \u2605 DEFAULT';
+                } else {
+                    opt.textContent = cleanLabel;
+                }
+            }
+        }
+
+        /** Update admin config display when we get config from server. */
+        function updateAdminConfig(workerModel, orchModel, maxWorkers) {
+            adminCurrentModel.textContent = workerModel || '--';
+            adminOrchModel.textContent = orchModel || '--';
+            adminMaxWorkers.textContent = maxWorkers != null ? String(maxWorkers) : '--';
+        }
+
+        /* ============================================================
+           3D Farm View — Initialization
+           ============================================================ */
+
+        var farmContainer = document.getElementById('farm-view');
+
+        /** Initialize the LlamaFarm 3D renderer. */
+        var _initFarmRetries = 0;
+        function initFarm() {
+            if (_llamaFarm) return; // already initialized
+            if (typeof window.LlamaFarm !== 'function') {
+                _initFarmRetries++;
+                console.warn('[Farm] LlamaFarm not loaded yet, retry #' + _initFarmRetries);
+                addEventLog('LlamaFarm not loaded — retry #' + _initFarmRetries);
+                if (_initFarmRetries < 20) setTimeout(initFarm, 500);
+                return;
+            }
+            try {
+                console.log('[Farm] Initializing LlamaFarm, container:', farmContainer.clientWidth, 'x', farmContainer.clientHeight);
+                _llamaFarm = new window.LlamaFarm(farmContainer);
+                addEventLog('3D Llama Farm initialized');
+
+                /* Wire up llama click → chat target switch */
+                _llamaFarm.onLlamaClick = function (agentId) {
+                    switchChatTarget(agentId);
+                };
+
+                /* Backfill: add existing agents to the farm (individually caught) */
+                var agentIds = Object.keys(agents);
+                console.log('[Farm] Backfilling', agentIds.length, 'agents:', agentIds);
+                agentIds.forEach(function (agentId) {
+                    try {
+                        var isOrch = agents[agentId].isOrchestrator;
+                        _llamaFarm.addLlama(agentId, isOrch);
+                        addEventLog('Backfill llama: ' + agentId + (isOrch ? ' (orch)' : ''));
+                    } catch (e) {
+                        console.error('[Farm] Backfill error for', agentId, e);
+                        addEventLog('Backfill FAILED: ' + agentId + ' — ' + e.message);
+                    }
+                });
+            } catch (e) {
+                console.error('[Farm] Init failed:', e);
+                addEventLog('Farm init failed: ' + e.message);
+            }
+        }
+
+        /* Handle resize for farm view */
+        window.addEventListener('resize', function () {
+            if (_llamaFarm) {
+                _llamaFarm.resize();
+            }
+        });
+
+        /* Farm agent spawn buttons */
+        ['claude', 'codex', 'gemini'].forEach(function (agent) {
+            var btn = document.getElementById('farm-spawn-' + agent);
+            if (btn) {
+                btn.addEventListener('click', function () {
+                    launchPreset(agent);
+                });
+            }
+        });
+
+        /* Kill All — shared handler for both buttons */
+        function handleKillAll(btn, statusEl) {
+            if (!confirm('Kill ALL llamas and reset the King?')) return;
+            if (btn) btn.disabled = true;
+            if (statusEl) flashStatus(statusEl, 'Killing all agents...', '', 0);
+            sendCommand({ command: 'kill_all' });
+            addEventLog('KILL SWITCH activated — stopping all agents');
+            if (btn && btn.classList.contains('farm-ctrl-btn')) {
+                btn.classList.add('flash');
+                setTimeout(function () { btn.classList.remove('flash'); }, 400);
+            }
+            setTimeout(function () {
+                if (btn) btn.disabled = false;
+                if (statusEl) flashStatus(statusEl, 'All agents killed', 'ok', 3000);
+            }, 1000);
+        }
+
+        /* Sidebar kill-all button */
+        var killAllBtn = document.getElementById('kill-all-btn');
+        var killAllStatus = document.getElementById('kill-all-status');
+        if (killAllBtn) {
+            killAllBtn.addEventListener('click', function () {
+                handleKillAll(killAllBtn, killAllStatus);
+            });
+        }
+
+        /* Farm kill-all button */
+        var farmKillAllBtn = document.getElementById('farm-kill-all-btn');
+        if (farmKillAllBtn) {
+            farmKillAllBtn.addEventListener('click', function () {
+                handleKillAll(farmKillAllBtn, killAllStatus);
+            });
+        }
+
+        /* ============================================================
+           Agent Chat — talk to any agent (orchestrator or workers)
+           ============================================================ */
+        var chatPanel       = document.getElementById('orch-chat');
+        var chatHeader      = document.getElementById('chat-header');
+        var chatHeaderIcon  = document.getElementById('chat-header-icon');
+        var chatHeaderTitle = document.getElementById('chat-header-title');
+        var chatHeaderBadge = document.getElementById('chat-header-badge');
+        var chatMessages    = document.getElementById('chat-messages');
+        var chatInput       = document.getElementById('chat-input');
+        var chatSendBtn     = document.getElementById('chat-send-btn');
+        var chatMsgCount    = 0;
+        var chatTargetAgent = 'orchestrator';
+        var _lastShownAction = {};  // agentId -> last action string shown
+
+        /* Display name mapping — internal IDs stay the same */
+        function displayName(agentId) {
+            if (agentId === 'orchestrator') return 'Llama King';
+            return agentId.replace(/^llama-/, 'Llama-');
+        }
+
+        /* Toggle collapse */
+        chatHeader.addEventListener('click', function (e) {
+            /* Don't toggle if clicking inside the badge or other interactive elements */
+            chatPanel.classList.toggle('collapsed');
+            if (!chatPanel.classList.contains('collapsed')) {
+                chatInput.focus();
+            }
+        });
+
+        /* Switch chat target to a specific agent */
+        function switchChatTarget(agentId) {
+            chatTargetAgent = agentId;
+            var isOrch = (agentId === 'orchestrator');
+            var name = displayName(agentId);
+            chatHeaderIcon.textContent = isOrch ? '\uD83E\uDD99' : '\uD83D\uDCAC';
+            chatHeaderTitle.textContent = name;
+            chatHeaderBadge.textContent = isOrch ? 'king' : 'worker';
+            chatInput.placeholder = 'Message ' + name + '...';
+
+            /* Clear messages and show switch notice */
+            while (chatMessages.firstChild) chatMessages.removeChild(chatMessages.firstChild);
+            addChatMessage('Now chatting with ' + name, 'system');
+
+            /* Open the chat if collapsed */
+            chatPanel.classList.remove('collapsed');
+            chatInput.focus();
+
+            /* Highlight in farm */
+            if (_llamaFarm) _llamaFarm.selectLlama(agentId);
+        }
+
+        /* Add a chat message bubble */
+        function addChatMessage(text, type) {
+            var msgEl = document.createElement('div');
+            msgEl.className = 'chat-msg ' + type;
+
+            var textEl = document.createElement('div');
+            textEl.textContent = text;
+            msgEl.appendChild(textEl);
+
+            var tsEl = document.createElement('div');
+            tsEl.className = 'chat-msg-ts';
+            var now = new Date();
+            tsEl.textContent = String(now.getHours()).padStart(2, '0') + ':' +
+                               String(now.getMinutes()).padStart(2, '0') + ':' +
+                               String(now.getSeconds()).padStart(2, '0');
+            msgEl.appendChild(tsEl);
+
+            chatMessages.appendChild(msgEl);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            chatMsgCount++;
+
+            while (chatMessages.childElementCount > 100) {
+                chatMessages.removeChild(chatMessages.firstElementChild);
+            }
+        }
+
+        /* Send message to currently targeted agent */
+        function sendChatMessage() {
+            var text = chatInput.value.trim();
+            if (!text) return;
+
+            addChatMessage(text, 'user');
+            sendCommand({
+                command: 'send_message',
+                agent_id: chatTargetAgent,
+                message: text,
+            });
+            chatInput.value = '';
+            chatInput.focus();
+        }
+
+        chatSendBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+
+        /* Log all agent actions to console; show reply messages in chat */
+        var _origHandleSwarmState = handleSwarmState;
+        handleSwarmState = function (message) {
+            _origHandleSwarmState(message);
+
+            var allAgents = message.agents || {};
+            Object.keys(allAgents).forEach(function (agentId) {
+                var snap = allAgents[agentId];
+                if (!snap || !snap.last_action) return;
+
+                var action = snap.last_action;
+                var actionStr = JSON.stringify(action);
+
+                if (_lastShownAction[agentId] === actionStr) return;
+                _lastShownAction[agentId] = actionStr;
+
+                var cmd = action.command || action.action || '';
+                var detail = '';
+                if (agentId === 'orchestrator') {
+                    if (cmd === 'spawn') detail = 'Spawning llama: ' + (action.shell_cmd || action.goal || '');
+                    else if (cmd === 'kill') detail = 'Killing: ' + displayName(action.worker || '');
+                    else if (cmd === 'assign') detail = 'Assigning ' + displayName(action.worker || '') + ': ' + (action.goal || '');
+                    else if (cmd === 'wait') detail = 'Waiting ' + (action.value || '') + 's';
+                    else if (cmd === 'reply') detail = action.reply || '';
+                    else detail = actionStr;
+                } else {
+                    if (cmd === 'type') detail = '$ ' + (action.value || '');
+                    else if (cmd === 'wait') detail = '(waiting ' + (action.value || '') + 's)';
+                    else if (cmd === 'key') detail = '[key: ' + (action.value || '') + ']';
+                    else detail = actionStr;
+                }
+                addEventLog(displayName(agentId) + ': ' + detail);
+
+                /* Show reply in chat if the agent included one */
+                if (action.reply && agentId === chatTargetAgent) {
+                    addChatMessage(action.reply, 'orch');
+                }
+            });
+        };
+
+        /* ============================================================
            Bootstrap
            ============================================================ */
         addEventLog('Swarm Control UI initialised');
+        addChatMessage('Chat connected. Click a llama or send a message.', 'system');
         connect();
+        loadModels();
+        setInterval(loadModels, 30000);
+
+        /* Init farm after a short delay to let Three.js load */
+        setTimeout(initFarm, 500);
+
+        /* ============================================================
+           Llama King Loading Screen — stars, sparkles, dismissal
+           ============================================================ */
+        (function initLoadingScreen() {
+            var starsContainer = document.getElementById('loading-stars');
+            var loadingEl = document.getElementById('farm-loading');
+            if (!starsContainer || !loadingEl) return;
+
+            // Generate random stars
+            for (var i = 0; i < 60; i++) {
+                var star = document.createElement('div');
+                star.className = 'loading-star';
+                star.style.left = (Math.random() * 100) + '%';
+                star.style.top = (Math.random() * 65) + '%';
+                star.style.animationDelay = (Math.random() * 3) + 's';
+                star.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+                var size = 1 + Math.random() * 3;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                starsContainer.appendChild(star);
+            }
+
+            // Generate sparkles around the llama
+            var llamaEl = loadingEl.querySelector('.loading-llama');
+            if (llamaEl) {
+                for (var s = 0; s < 12; s++) {
+                    var sparkle = document.createElement('div');
+                    sparkle.className = 'loading-sparkle';
+                    sparkle.style.left = (30 + Math.random() * 40) + '%';
+                    sparkle.style.bottom = (20 + Math.random() * 30) + '%';
+                    sparkle.style.animationDelay = (Math.random() * 3) + 's';
+                    sparkle.style.animationDuration = (2 + Math.random() * 2) + 's';
+                    var sparkSize = 4 + Math.random() * 6;
+                    sparkle.style.width = sparkSize + 'px';
+                    sparkle.style.height = sparkSize + 'px';
+                    loadingEl.appendChild(sparkle);
+                }
+            }
+
+            // Update status text based on connection state
+            var statusSpan = loadingEl.querySelector('.loading-dots');
+            var messages = [
+                'Summoning the herd',
+                'Polishing the crown',
+                'Gathering the flock',
+                'Lighting the torches',
+                'Preparing the pasture',
+                'Awakening the kingdom',
+            ];
+            var msgIdx = 0;
+            var _statusInterval = setInterval(function () {
+                if (!statusSpan || loadingEl.classList.contains('farewell')) {
+                    clearInterval(_statusInterval);
+                    return;
+                }
+                msgIdx = (msgIdx + 1) % messages.length;
+                statusSpan.textContent = messages[msgIdx];
+            }, 3000);
+        })();
+
+        /** Dismiss the loading screen with a fade-out. */
+        var _loadingDismissed = false;
+        function dismissLoadingScreen() {
+            if (_loadingDismissed) return;
+            _loadingDismissed = true;
+            var el = document.getElementById('farm-loading');
+            if (!el) return;
+            el.classList.add('farewell');
+            setTimeout(function () { el.classList.add('hidden'); }, 1300);
+        }
+
+        /* Safety net: periodically sync missing llamas to farm */
+        setInterval(function () {
+            if (!_llamaFarm) return;
+            var agentIds = Object.keys(agents);
+            for (var i = 0; i < agentIds.length; i++) {
+                var aid = agentIds[i];
+                if (!_llamaFarm.llamas[aid]) {
+                    console.log('[Farm] Safety-net: adding missing llama:', aid);
+                    try {
+                        _llamaFarm.addLlama(aid, agents[aid].isOrchestrator);
+                        addEventLog('Safety-net llama: ' + aid);
+                    } catch (e) {
+                        console.error('[Farm] Safety-net error:', aid, e);
+                    }
+                }
+            }
+        }, 2000);
 
     </script>
 </body>

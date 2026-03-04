@@ -28,12 +28,66 @@ from config import (
     OBSERVE_TIMEOUT,
     WEB_HOST,
     WEB_PORT,
+    is_cli_agent,
 )
+import re
+
+from cli_agent import TerminalCLIAgent
 from keystroke_engine import encode_action
 from ollama_client import OllamaAgent
 from pty_manager import PTYManager
 from screen import TerminalScreen
 from web.server import broadcast as web_broadcast, app as web_app
+
+# ---------------------------------------------------------------------------
+# Safety — block destructive commands before they reach the PTY
+# ---------------------------------------------------------------------------
+
+_DANGEROUS_PATTERNS = [
+    re.compile(r'\brm\s+-(r|f|rf|fr)', re.IGNORECASE),  # rm -rf, rm -f, rm -r
+    re.compile(r'\brm\b.*\*'),                             # rm with wildcards
+    re.compile(r'\bmkfs\b'),                                # format filesystem
+    re.compile(r'\bdd\b\s+if='),                            # disk overwrite
+    re.compile(r'>\s*/dev/sd'),                             # overwrite disk device
+    re.compile(r'\bsudo\b'),                                # privilege escalation
+    re.compile(r'\bchmod\s+777'),                           # world-writable
+    re.compile(r'\bcurl\b.*\|\s*(ba)?sh'),                  # pipe curl to shell
+    re.compile(r'\bwget\b.*\|\s*(ba)?sh'),                  # pipe wget to shell
+    re.compile(r'\b:()\s*\{'),                              # fork bomb
+    re.compile(r'/etc/passwd'),                             # password file access
+    re.compile(r'/etc/shadow'),                             # shadow file access
+    re.compile(r'\bshutdown\b'),                            # shutdown
+    re.compile(r'\breboot\b'),                              # reboot
+    re.compile(r'\bkill\s+-9\b'),                           # force kill
+    re.compile(r'\bkillall\b'),                             # kill all processes
+    re.compile(r'\bxargs\b.*\brm\b'),                       # xargs rm
+    re.compile(r'\bformat\b'),                              # format
+]
+
+
+def _is_safe_action(action: dict) -> bool:
+    """Return False if the action contains a dangerous command or blocked key combo."""
+    act = action.get("action", "")
+
+    # Block ctrl+c / ctrl+z — workers should never interrupt or suspend
+    if act == "keys":
+        vals = action.get("value", [])
+        for v in vals:
+            if isinstance(v, str) and v.lower() in ("ctrl+c", "ctrl+z", "ctrl+\\"):
+                return False
+        return True
+
+    if act != "type":
+        return True
+    text = action.get("value", "")
+    # Block AI tools from being run as shell commands
+    stripped = text.strip().split()[0] if text.strip() else ""
+    if stripped.lower() in ("codex", "gemini", "claude", "ollama", "chatgpt", "gpt"):
+        return False
+    for pat in _DANGEROUS_PATTERNS:
+        if pat.search(text):
+            return False
+    return True
 
 
 class TerminalAgent:
@@ -73,15 +127,34 @@ class TerminalAgent:
     ) -> None:
         self.agent_id = agent_id
         self.goal = goal
-        self.pty = PTYManager(shell=shell, cols=cols, rows=rows)
-        self.screen = TerminalScreen(cols=cols, rows=rows)
-        self.ollama = OllamaAgent(model=model, max_history=max_history)
         self.web_enabled = web_enabled
         self.running = False
         self.iteration = 0
         self.last_action: dict | None = None
         self.status: str = "idle"
         self._uvicorn_loop = None  # set by main() after starting uvicorn
+        self._is_cli = is_cli_agent(model)
+
+        if self._is_cli:
+            # CLI agent mode — the CLI itself is the "brain" AND the terminal
+            # No separate PTY/screen needed for the shell; the CLI agent
+            # manages its own PTY internally. But we still need a shell PTY
+            # for the worker to execute commands in.
+            self.pty = PTYManager(shell=shell, cols=cols, rows=rows)
+            self.screen = TerminalScreen(cols=cols, rows=rows)
+            cli_name = model.replace("-cli", "")  # "gemini-cli" -> "gemini"
+            self.ollama = TerminalCLIAgent(
+                cli_name=cli_name,
+                orchestrator=False,
+                max_history=max_history,
+            )
+            self.ollama.goal = goal
+        else:
+            # Ollama mode — standard PTY + OllamaAgent
+            self.pty = PTYManager(shell=shell, cols=cols, rows=rows)
+            self.screen = TerminalScreen(cols=cols, rows=rows)
+            self.ollama = OllamaAgent(model=model, max_history=max_history)
+            self.ollama.goal = goal
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -119,6 +192,7 @@ class TerminalAgent:
             "last_action": dict(self.last_action) if self.last_action is not None else None,
             "screen_text": snippet,
             "goal": self.goal,
+            "model": self.ollama.model,
         }
 
     # ------------------------------------------------------------------
@@ -149,7 +223,14 @@ class TerminalAgent:
 
         For ``wait`` actions, sleeps for the specified duration.
         For all other actions, encodes to raw bytes and writes to the PTY.
+        Dangerous commands are blocked and replaced with a safe wait.
         """
+        if not _is_safe_action(action):
+            print(f"[Agent] BLOCKED dangerous command: {action.get('value', '')}")
+            self.last_action = {"action": "wait", "value": 1}
+            time.sleep(1)
+            return
+
         self.last_action = action
         raw = encode_action(action)
         if raw is None:
